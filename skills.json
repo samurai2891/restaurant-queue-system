@@ -1,0 +1,99 @@
+{
+  "agents": [
+    {
+      "id": "backend",
+      "name": "Backend",
+      "role": "API/DB/Business Logic",
+      "skills": ["api-design", "data-modeling", "auth", "performance"],
+      "stack": ["node", "typescript", "drizzle"],
+      "ownership": ["server/", "drizzle/", "shared/"]
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "role": "UI/UX/State",
+      "skills": ["react", "state-management", "accessibility"],
+      "stack": ["react", "typescript", "vite"],
+      "ownership": ["client/", "shared/"]
+    },
+    {
+      "id": "qa",
+      "name": "QA",
+      "role": "Testing/Validation",
+      "skills": ["test-planning", "automation", "regression"],
+      "stack": ["vitest"],
+      "ownership": ["client/", "server/", "shared/"]
+    },
+    {
+      "id": "integrations",
+      "name": "Integrations",
+      "role": "External APIs/Notifications",
+      "skills": ["api-integration", "webhooks", "observability"],
+      "stack": ["node", "typescript"],
+      "ownership": ["server/", "shared/"]
+    }
+  ],
+  "skills": [
+    {
+      "skill_id": "api-design",
+      "description": "REST/GraphQL API design and versioning",
+      "priority": "high",
+      "validation": "API contract tests"
+    },
+    {
+      "skill_id": "data-modeling",
+      "description": "Relational schema and migrations",
+      "priority": "high",
+      "validation": "Migration review and schema tests"
+    },
+    {
+      "skill_id": "react",
+      "description": "Component architecture and UI state",
+      "priority": "high",
+      "validation": "Component tests and visual review"
+    },
+    {
+      "skill_id": "accessibility",
+      "description": "A11y best practices",
+      "priority": "medium",
+      "validation": "Manual a11y checklist"
+    },
+    {
+      "skill_id": "test-planning",
+      "description": "Test coverage strategy",
+      "priority": "high",
+      "validation": "QA checklist signoff"
+    }
+  ],
+  "deliverables": [
+    {
+      "id": "change-summary",
+      "description": "Change summary and impact",
+      "required_files": []
+    },
+    {
+      "id": "tests",
+      "description": "Relevant tests updated/added",
+      "required_files": []
+    },
+    {
+      "id": "docs",
+      "description": "Documentation updates when needed",
+      "required_files": []
+    }
+  ],
+  "dependencies": [
+    {
+      "type": "db",
+      "description": "Database configuration in drizzle.config.ts"
+    },
+    {
+      "type": "env",
+      "description": "Environment variables defined in .env or server config"
+    },
+    {
+      "type": "external_api",
+      "description": "External APIs configured in server integrations"
+    }
+  ]
+}
