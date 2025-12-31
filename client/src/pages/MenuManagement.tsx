@@ -19,9 +19,18 @@ import {
   ChefHat,
   ImageIcon
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
+
+const isValidUrl = (value: string) => {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export default function MenuManagement() {
   const { storeId } = useParams<{ storeId: string }>();
@@ -43,7 +52,14 @@ export default function MenuManagement() {
   const [itemCategoryId, setItemCategoryId] = useState("");
   const [itemPrepTime, setItemPrepTime] = useState("10");
   const [itemImageUrl, setItemImageUrl] = useState("");
+  const [itemImagePreviewError, setItemImagePreviewError] = useState(false);
   const [itemAllergens, setItemAllergens] = useState("");
+  const normalizedImageUrl = itemImageUrl.trim();
+  const isImageUrlValid = normalizedImageUrl.length > 0 && isValidUrl(normalizedImageUrl);
+
+  useEffect(() => {
+    setItemImagePreviewError(false);
+  }, [itemImageUrl]);
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -118,13 +134,17 @@ export default function MenuManagement() {
       toast.error("必須項目を入力してください");
       return;
     }
+    if (normalizedImageUrl && !isValidUrl(normalizedImageUrl)) {
+      toast.error("画像URLの形式が正しくありません");
+      return;
+    }
     createItemMutation.mutate({
       storeId: storeIdNum,
       categoryId: parseInt(itemCategoryId),
       name: itemName,
       description: itemDescription || undefined,
       price: itemPrice,
-      imageUrl: itemImageUrl || undefined,
+      imageUrl: normalizedImageUrl || undefined,
       allergens: itemAllergens
         .split(",")
         .map((allergen) => allergen.trim())
@@ -273,8 +293,30 @@ export default function MenuManagement() {
                     <Input
                       placeholder="https://example.com/menu.jpg"
                       value={itemImageUrl}
-                      onChange={(e) => setItemImageUrl(e.target.value)}
+                      onChange={(e) => {
+                        setItemImageUrl(e.target.value);
+                        setItemImagePreviewError(false);
+                      }}
                     />
+                    {normalizedImageUrl && !isImageUrlValid && (
+                      <p className="text-xs text-destructive">URL形式が正しくありません</p>
+                    )}
+                    {normalizedImageUrl && isImageUrlValid && (
+                      <div className="rounded-lg border bg-muted/30 p-2">
+                        {itemImagePreviewError ? (
+                          <p className="text-xs text-muted-foreground">
+                            画像を読み込めませんでした
+                          </p>
+                        ) : (
+                          <img
+                            src={normalizedImageUrl}
+                            alt="プレビュー"
+                            className="max-h-40 w-full rounded-md object-cover"
+                            onError={() => setItemImagePreviewError(true)}
+                          />
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>アレルゲン（カンマ区切り）</Label>
