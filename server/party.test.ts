@@ -132,7 +132,7 @@ describe("party.guestRegister", () => {
 
     expect(result.ticketNumber).toBe(101);
     expect(result.accessToken).toBe("test-token-123");
-    expect(result.estimatedWaitMinutes).toBe(0);
+    expect(result.estimatedWaitMinutes).toBe(null);
   });
 });
 

@@ -625,13 +625,16 @@ export async function getAuditLogsByStoreId(storeId: number, options: AuditLogQu
     conditions.push(eq(auditLogs.userId, options.filters.userId));
   }
   if (options.cursor) {
-    conditions.push(or(
+    const cursorCondition = or(
       lt(auditLogs.createdAt, options.cursor.createdAt),
       and(
         eq(auditLogs.createdAt, options.cursor.createdAt),
         lt(auditLogs.id, options.cursor.id)
       )
-    ));
+    );
+    if (cursorCondition) {
+      conditions.push(cursorCondition);
+    }
   }
 
   return db.select().from(auditLogs)
@@ -765,10 +768,10 @@ export async function getWaitTimeStatsByHour(storeId: number, startDate: string,
       and ${parties.registeredAt} < date_add(${endDate}, interval 1 day)
   `);
 
-  const rows = Array.isArray(rawRows) ? rawRows : rawRows.rows;
+  const rows: WaitTimeSampleRow[] = Array.isArray(rawRows) ? rawRows : (rawRows as any).rows || [];
   const grouped = new Map<string, { meta: Omit<WaitTimeByHourStat, "count" | "avgWait" | "medianWait" | "p95Wait" | "minWait" | "maxWait" | "distribution">; waits: number[] }>();
 
-  rows.forEach((row) => {
+  rows.forEach((row: WaitTimeSampleRow) => {
     if (row.waitMinutes === null || row.waitMinutes === undefined) return;
     const hour = Number(row.hour);
     const seatTypeId = row.seatTypeId === null ? null : Number(row.seatTypeId);

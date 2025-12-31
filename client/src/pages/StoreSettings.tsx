@@ -126,8 +126,18 @@ export default function StoreSettings() {
     { enabled: isAuthenticated && storeIdNum > 0 }
   );
 
-  const exportAuditMutation = trpc.audit.export.useMutation({
-    onSuccess: (data) => {
+  const utils = trpc.useUtils();
+  
+  const handleExportAudit = async () => {
+    try {
+      const data = await utils.client.audit.export.query({
+        storeId: storeIdNum,
+        limit: 5000,
+        startDate: auditStartDate,
+        endDate: auditEndDate,
+        action: auditAction || undefined,
+        userId: auditUserId ? Number(auditUserId) : undefined,
+      });
       const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -138,11 +148,10 @@ export default function StoreSettings() {
       link.remove();
       URL.revokeObjectURL(url);
       toast.success("CSVをダウンロードしました");
-    },
-    onError: (error) => {
+    } catch (error: any) {
       toast.error(`エラー: ${error.message}`);
     }
-  });
+  };
 
   const staffNameById = useMemo(() => {
     const map = new Map<number, string>();
@@ -277,10 +286,7 @@ export default function StoreSettings() {
   };
 
   const handleExportAudits = () => {
-    exportAuditMutation.mutate({
-      storeId: storeIdNum,
-      ...auditFilters,
-    });
+    handleExportAudit();
   };
 
   if (authLoading || storeLoading) {
@@ -716,7 +722,6 @@ export default function StoreSettings() {
                   <Button
                     variant="outline"
                     onClick={handleExportAudits}
-                    disabled={exportAuditMutation.isLoading}
                   >
                     <Download className="w-4 h-4 mr-2" />
                     CSVダウンロード
