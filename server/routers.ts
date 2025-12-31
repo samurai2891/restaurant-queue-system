@@ -780,6 +780,7 @@ const menuRouter = router({
       description: z.string().optional(),
       price: z.string().optional(),
       imageUrl: z.string().optional(),
+      allergens: z.any().optional(),
       isAvailable: z.boolean().optional(),
       stockCount: z.number().optional(),
       prepTimeMinutes: z.number().optional(),
