@@ -294,6 +294,11 @@ export async function getPartiesByStoreId(storeId: number, status?: string[]) {
   return query;
 }
 
+export async function getActivePartyCount(storeId: number) {
+  const parties = await getPartiesByStoreId(storeId);
+  return parties.filter(p => ["waiting", "notified", "arrived"].includes(p.status)).length;
+}
+
 export async function getWaitingParties(storeId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -459,6 +464,20 @@ export async function updateMenuItem(id: number, data: Partial<InsertMenuItem>) 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(menuItems).set(data).where(eq(menuItems.id, id));
+}
+
+export async function consumeMenuItemStock(menuItemId: number, quantity: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const menuItem = await getMenuItemById(menuItemId);
+  if (!menuItem || menuItem.stockCount === null || menuItem.stockCount === undefined) {
+    return;
+  }
+  const newStock = Math.max(menuItem.stockCount - quantity, 0);
+  await db.update(menuItems).set({
+    stockCount: newStock,
+    isAvailable: newStock > 0,
+  }).where(eq(menuItems.id, menuItemId));
 }
 
 export async function createMenuModifier(data: InsertMenuModifier) {

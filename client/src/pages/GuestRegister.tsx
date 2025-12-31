@@ -14,7 +14,7 @@ import {
   CheckCircle,
   AlertCircle
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -42,6 +42,18 @@ export default function GuestRegister() {
     { storeId: storeIdNum },
     { enabled: storeIdNum > 0 }
   );
+
+  const partySizeNumber = Number.parseInt(partySize, 10);
+  const filteredSeatTypes = seatTypes?.filter(
+    (st: { minPartySize: number; maxPartySize: number }) =>
+      partySizeNumber >= st.minPartySize && partySizeNumber <= st.maxPartySize
+  ) ?? [];
+
+  useEffect(() => {
+    if (preferredSeatTypeId && !filteredSeatTypes.some(st => String(st.id) === preferredSeatTypeId)) {
+      setPreferredSeatTypeId("");
+    }
+  }, [filteredSeatTypes, preferredSeatTypeId]);
 
   const registerMutation = trpc.party.guestRegister.useMutation({
     onSuccess: (data) => {
@@ -240,18 +252,27 @@ export default function GuestRegister() {
               {seatTypes && seatTypes.length > 0 && (
                 <div className="space-y-2">
                   <Label>希望の席種（任意）</Label>
-                  <Select value={preferredSeatTypeId} onValueChange={setPreferredSeatTypeId}>
+                  <Select
+                    value={preferredSeatTypeId}
+                    onValueChange={setPreferredSeatTypeId}
+                    disabled={filteredSeatTypes.length === 0}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder="選択してください" />
+                      <SelectValue placeholder={filteredSeatTypes.length === 0 ? "該当する席種がありません" : "選択してください"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {seatTypes.map((st: { id: number; name: string; minPartySize: number; maxPartySize: number }) => (
+                      {filteredSeatTypes.map((st: { id: number; name: string; minPartySize: number; maxPartySize: number }) => (
                         <SelectItem key={st.id} value={String(st.id)}>
                           {st.name} ({st.minPartySize}〜{st.maxPartySize}名)
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {filteredSeatTypes.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      選択した人数に合う席種がありません。
+                    </p>
+                  )}
                 </div>
               )}
 
