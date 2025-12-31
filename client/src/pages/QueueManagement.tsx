@@ -256,9 +256,9 @@ export default function QueueManagement() {
 
       <main className="container py-6">
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid gap-4 mb-6 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
           <Card>
-            <CardContent className="pt-4">
+            <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">待機中</p>
@@ -269,7 +269,7 @@ export default function QueueManagement() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-4">
+            <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">呼出中</p>
@@ -279,9 +279,9 @@ export default function QueueManagement() {
               </div>
             </CardContent>
           </Card>
-          {seatTypes?.slice(0, 2).map(seatType => (
+          {seatTypes?.map(seatType => (
             <Card key={seatType.id}>
-              <CardContent className="pt-4">
+              <CardContent className="py-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-muted-foreground">{seatType.name}空き</p>
