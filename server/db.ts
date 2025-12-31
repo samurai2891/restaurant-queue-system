@@ -657,6 +657,117 @@ export async function getDailyAnalytics(storeId: number, startDate: string, endD
     .orderBy(asc(dailyAnalytics.date));
 }
 
+type WaitTimeSampleRow = {
+  hour: number;
+  seatTypeId: number | null;
+  seatTypeName: string | null;
+  waitMinutes: number | null;
+};
+
+type WaitTimeDistributionBucket = {
+  bucket: string;
+  count: number;
+};
+
+export type WaitTimeByHourStat = {
+  hour: number;
+  seatTypeId: number | null;
+  seatTypeName: string;
+  count: number;
+  avgWait: number;
+  medianWait: number;
+  p95Wait: number;
+  minWait: number;
+  maxWait: number;
+  distribution: WaitTimeDistributionBucket[];
+};
+
+const waitTimeBuckets = [
+  { label: "0-10", min: 0, max: 10 },
+  { label: "11-20", min: 11, max: 20 },
+  { label: "21-30", min: 21, max: 30 },
+  { label: "31-45", min: 31, max: 45 },
+  { label: "46-60", min: 46, max: 60 },
+  { label: "61+", min: 61, max: Number.POSITIVE_INFINITY },
+];
+
+const nearestRank = (sorted: number[], percentile: number) => {
+  if (sorted.length === 0) return 0;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(percentile * sorted.length) - 1));
+  return sorted[index];
+};
+
+const buildDistribution = (waitTimes: number[]) =>
+  waitTimeBuckets.map((bucket) => ({
+    bucket: bucket.label,
+    count: waitTimes.filter((value) => value >= bucket.min && value <= bucket.max).length,
+  }));
+
+export async function getWaitTimeStatsByHour(storeId: number, startDate: string, endDate: string): Promise<WaitTimeByHourStat[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rawRows = await db.execute<WaitTimeSampleRow>(sql`
+    select
+      hour(${parties.registeredAt}) as hour,
+      coalesce(${parties.assignedSeatTypeId}, ${parties.preferredSeatTypeId}) as seatTypeId,
+      ${seatTypes.name} as seatTypeName,
+      timestampdiff(minute, ${parties.registeredAt}, ${parties.seatedAt}) as waitMinutes
+    from ${parties}
+    left join ${seatTypes}
+      on ${seatTypes.id} = coalesce(${parties.assignedSeatTypeId}, ${parties.preferredSeatTypeId})
+    where ${parties.storeId} = ${storeId}
+      and ${parties.seatedAt} is not null
+      and ${parties.registeredAt} is not null
+      and ${parties.registeredAt} >= ${startDate}
+      and ${parties.registeredAt} < date_add(${endDate}, interval 1 day)
+  `);
+
+  const rows = Array.isArray(rawRows) ? rawRows : rawRows.rows;
+  const grouped = new Map<string, { meta: Omit<WaitTimeByHourStat, "count" | "avgWait" | "medianWait" | "p95Wait" | "minWait" | "maxWait" | "distribution">; waits: number[] }>();
+
+  rows.forEach((row) => {
+    if (row.waitMinutes === null || row.waitMinutes === undefined) return;
+    const hour = Number(row.hour);
+    const seatTypeId = row.seatTypeId === null ? null : Number(row.seatTypeId);
+    const seatTypeName = row.seatTypeName ?? "未指定";
+    const key = `${hour}-${seatTypeId ?? "unassigned"}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.waits.push(Number(row.waitMinutes));
+      return;
+    }
+    grouped.set(key, {
+      meta: {
+        hour,
+        seatTypeId,
+        seatTypeName,
+      },
+      waits: [Number(row.waitMinutes)],
+    });
+  });
+
+  return Array.from(grouped.values())
+    .map(({ meta, waits }) => {
+      const sorted = waits.slice().sort((a, b) => a - b);
+      const total = sorted.reduce((sum, value) => sum + value, 0);
+      const avg = sorted.length > 0 ? Math.round(total / sorted.length) : 0;
+      const median = nearestRank(sorted, 0.5);
+      const p95 = nearestRank(sorted, 0.95);
+      return {
+        ...meta,
+        count: sorted.length,
+        avgWait: avg,
+        medianWait: median,
+        p95Wait: p95,
+        minWait: sorted[0] ?? 0,
+        maxWait: sorted[sorted.length - 1] ?? 0,
+        distribution: buildDistribution(sorted),
+      };
+    })
+    .sort((a, b) => (a.hour - b.hour) || a.seatTypeName.localeCompare(b.seatTypeName, "ja"));
+}
+
 // ============================================
 // Utility Functions
 // ============================================
