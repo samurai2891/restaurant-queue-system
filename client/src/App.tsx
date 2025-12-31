@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import DashboardLayout from "./components/DashboardLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
@@ -32,11 +33,41 @@ function Router() {
       
       {/* 管理者用ページ */}
       <Route path="/dashboard" component={Dashboard} />
-      <Route path="/queue/:storeId" component={QueueManagement} />
-      <Route path="/settings/:storeId" component={StoreSettings} />
-      <Route path="/menu/:storeId" component={MenuManagement} />
-      <Route path="/kitchen/:storeId" component={KitchenDisplay} />
-      <Route path="/analytics/:storeId" component={Analytics} />
+      <Route path="/queue/:storeId">
+        {() => (
+          <DashboardLayout>
+            <QueueManagement />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/settings/:storeId">
+        {() => (
+          <DashboardLayout>
+            <StoreSettings />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/menu/:storeId">
+        {() => (
+          <DashboardLayout>
+            <MenuManagement />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/kitchen/:storeId">
+        {() => (
+          <DashboardLayout>
+            <KitchenDisplay />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/analytics/:storeId">
+        {() => (
+          <DashboardLayout>
+            <Analytics />
+          </DashboardLayout>
+        )}
+      </Route>
       
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
