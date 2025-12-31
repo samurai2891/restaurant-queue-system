@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -19,11 +21,29 @@ import {
   Bell,
   Plus,
   Trash2,
-  Save
+  Save,
+  ClipboardList,
+  Download
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
+
+type AuditCursor = {
+  id: number;
+  createdAt: string;
+};
+
+type AuditLogItem = {
+  id: number;
+  storeId: number;
+  userId: number | null;
+  action: string;
+  targetType: string | null;
+  targetId: number | null;
+  details: unknown;
+  createdAt: Date;
+};
 
 export default function StoreSettings() {
   const { storeId } = useParams<{ storeId: string }>();
@@ -62,6 +82,19 @@ export default function StoreSettings() {
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [lineChannelAccessToken, setLineChannelAccessToken] = useState("");
   const [lineChannelSecret, setLineChannelSecret] = useState("");
+  const [auditStartDate, setAuditStartDate] = useState("");
+  const [auditEndDate, setAuditEndDate] = useState("");
+  const [auditAction, setAuditAction] = useState("");
+  const [auditUserId, setAuditUserId] = useState("all");
+  const [auditFilters, setAuditFilters] = useState<{
+    startDate?: string;
+    endDate?: string;
+    action?: string;
+    userId?: number;
+  }>({});
+  const [auditItems, setAuditItems] = useState<AuditLogItem[]>([]);
+  const [auditCursor, setAuditCursor] = useState<AuditCursor | undefined>(undefined);
+  const [auditNextCursor, setAuditNextCursor] = useState<AuditCursor | undefined>(undefined);
 
   useEffect(() => {
     if (store) {
@@ -77,6 +110,64 @@ export default function StoreSettings() {
       setLineChannelSecret(store.lineChannelSecret || "");
     }
   }, [store]);
+
+  const { data: staffList } = trpc.staff.list.useQuery(
+    { storeId: storeIdNum },
+    { enabled: isAuthenticated && storeIdNum > 0 }
+  );
+
+  const auditQuery = trpc.audit.list.useQuery(
+    {
+      storeId: storeIdNum,
+      limit: 50,
+      cursor: auditCursor,
+      ...auditFilters,
+    },
+    { enabled: isAuthenticated && storeIdNum > 0 }
+  );
+
+  const exportAuditMutation = trpc.audit.export.useMutation({
+    onSuccess: (data) => {
+      const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = data.fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success("CSVをダウンロードしました");
+    },
+    onError: (error) => {
+      toast.error(`エラー: ${error.message}`);
+    }
+  });
+
+  const staffNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    staffList?.forEach((staff) => {
+      const name = staff.user?.name || staff.user?.email;
+      if (name) {
+        map.set(staff.userId, name);
+      }
+    });
+    return map;
+  }, [staffList]);
+
+  useEffect(() => {
+    if (!auditQuery.data) return;
+    setAuditItems((prev) => (
+      auditCursor ? [...prev, ...auditQuery.data.items] : auditQuery.data.items
+    ));
+    setAuditNextCursor(auditQuery.data.nextCursor ?? undefined);
+  }, [auditQuery.data, auditCursor]);
+
+  useEffect(() => {
+    setAuditCursor(undefined);
+    setAuditItems([]);
+    setAuditNextCursor(undefined);
+  }, [storeIdNum]);
 
   const updateStoreMutation = trpc.store.update.useMutation({
     onSuccess: () => {
@@ -157,6 +248,41 @@ export default function StoreSettings() {
     });
   };
 
+  const handleApplyAuditFilters = () => {
+    setAuditFilters({
+      startDate: auditStartDate || undefined,
+      endDate: auditEndDate || undefined,
+      action: auditAction.trim() || undefined,
+      userId: auditUserId !== "all" ? parseInt(auditUserId, 10) : undefined,
+    });
+    setAuditCursor(undefined);
+    setAuditItems([]);
+    setAuditNextCursor(undefined);
+  };
+
+  const handleResetAuditFilters = () => {
+    setAuditStartDate("");
+    setAuditEndDate("");
+    setAuditAction("");
+    setAuditUserId("all");
+    setAuditFilters({});
+    setAuditCursor(undefined);
+    setAuditItems([]);
+    setAuditNextCursor(undefined);
+  };
+
+  const handleLoadMoreAudits = () => {
+    if (!auditNextCursor) return;
+    setAuditCursor(auditNextCursor);
+  };
+
+  const handleExportAudits = () => {
+    exportAuditMutation.mutate({
+      storeId: storeIdNum,
+      ...auditFilters,
+    });
+  };
+
   if (authLoading || storeLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -219,6 +345,10 @@ export default function StoreSettings() {
             <TabsTrigger value="order" className="gap-2">
               <Clock className="w-4 h-4" />
               注文ルール
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="gap-2">
+              <ClipboardList className="w-4 h-4" />
+              監査ログ
             </TabsTrigger>
           </TabsList>
 
@@ -520,6 +650,134 @@ export default function StoreSettings() {
                   <Save className="w-4 h-4 mr-2" />
                   保存
                 </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="audit">
+            <Card>
+              <CardHeader>
+                <CardTitle>監査ログ</CardTitle>
+                <CardDescription>操作履歴を期間やアクションで検索できます</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="audit-start">開始日</Label>
+                    <Input
+                      id="audit-start"
+                      type="date"
+                      value={auditStartDate}
+                      onChange={(e) => setAuditStartDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="audit-end">終了日</Label>
+                    <Input
+                      id="audit-end"
+                      type="date"
+                      value={auditEndDate}
+                      onChange={(e) => setAuditEndDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="audit-action">アクション</Label>
+                    <Input
+                      id="audit-action"
+                      placeholder="例: party.create"
+                      value={auditAction}
+                      onChange={(e) => setAuditAction(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>ユーザー</Label>
+                    <Select value={auditUserId} onValueChange={setAuditUserId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="すべて" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">すべて</SelectItem>
+                        {staffList?.map((staff) => (
+                          <SelectItem key={staff.userId} value={String(staff.userId)}>
+                            {staff.user?.name || staff.user?.email || `ID: ${staff.userId}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={handleApplyAuditFilters}>
+                    検索
+                  </Button>
+                  <Button variant="outline" onClick={handleResetAuditFilters}>
+                    クリア
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportAudits}
+                    disabled={exportAuditMutation.isLoading}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    CSVダウンロード
+                  </Button>
+                </div>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>日時</TableHead>
+                        <TableHead>ユーザー</TableHead>
+                        <TableHead>アクション</TableHead>
+                        <TableHead>対象</TableHead>
+                        <TableHead>詳細</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {auditItems.map((log) => {
+                        const targetLabel = log.targetType
+                          ? `${log.targetType}${log.targetId ? `#${log.targetId}` : ""}`
+                          : "-";
+                        const detailsText = log.details ? JSON.stringify(log.details) : "-";
+                        const userLabel = log.userId
+                          ? staffNameById.get(log.userId) || `ID: ${log.userId}`
+                          : "system";
+                        return (
+                          <TableRow key={`${log.id}-${log.createdAt.toISOString()}`}>
+                            <TableCell>{log.createdAt.toLocaleString("ja-JP")}</TableCell>
+                            <TableCell>{userLabel}</TableCell>
+                            <TableCell>{log.action}</TableCell>
+                            <TableCell>{targetLabel}</TableCell>
+                            <TableCell className="whitespace-normal break-words">
+                              {detailsText}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {auditItems.length === 0 && !auditQuery.isFetching && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground">
+                            該当するログがありません
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    {auditQuery.isFetching ? "読み込み中..." : ""}
+                  </div>
+                  {auditNextCursor && (
+                    <Button
+                      variant="outline"
+                      onClick={handleLoadMoreAudits}
+                      disabled={auditQuery.isFetching}
+                    >
+                      さらに読み込む
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
