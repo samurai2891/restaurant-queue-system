@@ -62,6 +62,8 @@ export default function StoreSettings() {
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [lineChannelAccessToken, setLineChannelAccessToken] = useState("");
   const [lineChannelSecret, setLineChannelSecret] = useState("");
+  const [autoNotifyRank, setAutoNotifyRank] = useState("0");
+  const [autoNotifyMinutes, setAutoNotifyMinutes] = useState("0");
 
   useEffect(() => {
     if (store) {
@@ -75,6 +77,8 @@ export default function StoreSettings() {
       setSmsEnabled(store.smsEnabled ?? false);
       setLineChannelAccessToken(store.lineChannelAccessToken || "");
       setLineChannelSecret(store.lineChannelSecret || "");
+      setAutoNotifyRank(String(store.autoNotifyRank ?? 0));
+      setAutoNotifyMinutes(String(store.autoNotifyMinutes ?? 0));
     }
   }, [store]);
 
@@ -132,6 +136,8 @@ export default function StoreSettings() {
       smsEnabled,
       lineChannelAccessToken: lineChannelAccessToken || undefined,
       lineChannelSecret: lineChannelSecret || undefined,
+      autoNotifyRank: parseInt(autoNotifyRank),
+      autoNotifyMinutes: parseInt(autoNotifyMinutes),
     });
   };
 
@@ -429,6 +435,41 @@ export default function StoreSettings() {
                         value={lineChannelSecret}
                         onChange={(e) => setLineChannelSecret(e.target.value)}
                       />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border rounded-lg space-y-4">
+                  <div>
+                    <p className="font-medium mb-2">自動通知ルール</p>
+                    <p className="text-sm text-muted-foreground">
+                      待機中のパーティに自動で通知を送信する条件を設定します
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>順番が上位N組以内</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={autoNotifyRank}
+                        onChange={(e) => setAutoNotifyRank(e.target.value)}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        0を設定すると順位条件は無効になります
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>推定待ち時間がT分以内</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={autoNotifyMinutes}
+                        onChange={(e) => setAutoNotifyMinutes(e.target.value)}
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        0を設定すると時間条件は無効になります
+                      </p>
                     </div>
                   </div>
                 </div>

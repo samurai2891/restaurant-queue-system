@@ -9,6 +9,7 @@ import { nanoid } from "nanoid";
 import { createCheckoutSession, createPortalSession, stripe } from "./stripe/stripe";
 import { SUBSCRIPTION_PLANS, getPlanByPriceId } from "./stripe/products";
 import { sendNotificationWithRetry } from "./_core/guestNotification";
+import { buildNotificationMessage, resolveNotificationRecipient } from "./_core/notificationHelpers";
 
 // ============================================
 // Helper: Check store access
@@ -114,6 +115,8 @@ const storeRouter = router({
       maxQueueSize: z.number().optional(),
       orderReleaseRank: z.number().optional(),
       orderReleaseMinutes: z.number().optional(),
+      autoNotifyRank: z.number().optional(),
+      autoNotifyMinutes: z.number().optional(),
       lineChannelAccessToken: z.string().optional(),
       lineChannelSecret: z.string().optional(),
       smsEnabled: z.boolean().optional(),
@@ -589,41 +592,21 @@ const notificationRouter = router({
       }
       
       // 送信先を決定
-      let recipient = "";
-      if (input.channel === "sms" && party.phone) {
-        recipient = party.phone;
-      } else if (input.channel === "email" && party.email) {
-        recipient = party.email;
-      } else if (input.channel === "line" && party.lineUserId) {
-        recipient = party.lineUserId;
-      } else {
+      const recipient = resolveNotificationRecipient(party, input.channel);
+      if (!recipient) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "送信先が設定されていません" });
       }
       
       // テンプレートからメッセージを生成
-      let message = input.message;
       const store = await db.getStoreById(input.storeId);
-      if (!message) {
-        const template = await db.getDefaultTemplate(input.storeId, input.type, input.channel);
-        if (template) {
-          message = template.template
-            .replace(/\{\{ticketNumber\}\}/g, String(party.ticketNumber))
-            .replace(/\{\{guestName\}\}/g, party.guestName || "お客様")
-            .replace(/\{\{partySize\}\}/g, String(party.partySize))
-            .replace(/\{\{storeName\}\}/g, store?.name || "")
-            .replace(/\{\{waitTime\}\}/g, String(party.estimatedWaitMinutes || 0));
-        } else {
-          // デフォルトメッセージ
-          const messages: Record<string, string> = {
-            registration: `受付番号${party.ticketNumber}番でお受けしました。`,
-            notify: `${party.ticketNumber}番のお客様、お席の準備ができました。`,
-            remind: `${party.ticketNumber}番のお客様、まもなくお呼び出しです。`,
-            seated: `ご来店ありがとうございました。`,
-            custom: "",
-          };
-          message = messages[input.type];
-        }
-      }
+      const message = await buildNotificationMessage({
+        storeId: input.storeId,
+        store: store ?? undefined,
+        party,
+        type: input.type,
+        channel: input.channel,
+        messageOverride: input.message,
+      });
       
       // 通知レコード作成
       const notificationId = await db.createNotification({

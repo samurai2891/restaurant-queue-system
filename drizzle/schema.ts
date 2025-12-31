@@ -52,6 +52,9 @@ export const stores = mysqlTable("stores", {
   // 注文解放ルール
   orderReleaseRank: int("orderReleaseRank").default(5), // 上位N組に注文解放
   orderReleaseMinutes: int("orderReleaseMinutes").default(15), // 残りT分以内に注文解放
+  // 自動通知ルール
+  autoNotifyRank: int("autoNotifyRank").default(0), // 上位N組に自動通知
+  autoNotifyMinutes: int("autoNotifyMinutes").default(0), // 残りT分以内に自動通知
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
