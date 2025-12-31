@@ -21,16 +21,19 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import {
+  BarChart3,
+  ChefHat,
+  ClipboardList,
+  LogOut,
+  PanelLeft,
+  Settings,
+  UtensilsCrossed,
+} from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
-
-const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
-];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -112,8 +115,41 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  const storeIdMatch = location.match(
+    /\/(queue|menu|kitchen|analytics|settings)\/([^/]+)/
+  );
+  const storeId = storeIdMatch?.[2];
+
+  const menuItems = [
+    {
+      icon: ClipboardList,
+      label: "キュー管理",
+      path: storeId ? `/queue/${storeId}` : "/queue",
+    },
+    {
+      icon: UtensilsCrossed,
+      label: "メニュー管理",
+      path: storeId ? `/menu/${storeId}` : "/menu",
+    },
+    {
+      icon: ChefHat,
+      label: "キッチン",
+      path: storeId ? `/kitchen/${storeId}` : "/kitchen",
+    },
+    {
+      icon: BarChart3,
+      label: "分析",
+      path: storeId ? `/analytics/${storeId}` : "/analytics",
+    },
+    {
+      icon: Settings,
+      label: "設定",
+      path: storeId ? `/settings/${storeId}` : "/settings",
+    },
+  ];
+
+  const activeMenuItem = menuItems.find(item => item.path === location);
 
   useEffect(() => {
     if (isCollapsed) {
