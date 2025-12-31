@@ -1148,6 +1148,17 @@ const analyticsRouter = router({
       await checkStoreAccess(ctx.user.id, input.storeId);
       return db.getDailyAnalytics(input.storeId, input.startDate, input.endDate);
     }),
+
+  waitTimeByHour: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      startDate: z.string(),
+      endDate: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+      return db.getWaitTimeStatsByHour(input.storeId, input.startDate, input.endDate);
+    }),
 });
 
 // ============================================

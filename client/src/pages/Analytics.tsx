@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
@@ -9,14 +10,13 @@ import {
   Loader2,
   BarChart3,
   TrendingUp,
-  TrendingDown,
   Users,
   Clock,
   Bell,
   XCircle,
   CheckCircle
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { 
   LineChart, 
@@ -35,11 +35,32 @@ import {
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+const formatDateInput = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getRangeFromToday = (daysAgo: number) => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - daysAgo);
+  return {
+    start: formatDateInput(start),
+    end: formatDateInput(end),
+  };
+};
+
 export default function Analytics() {
   const { storeId } = useParams<{ storeId: string }>();
   const storeIdNum = parseInt(storeId || "0");
   const { loading: authLoading, isAuthenticated } = useAuth();
   const [period, setPeriod] = useState("7d");
+  const initialRange = getRangeFromToday(6);
+  const [startDate, setStartDate] = useState(initialRange.start);
+  const [endDate, setEndDate] = useState(initialRange.end);
+  const [waitTimeMetric, setWaitTimeMetric] = useState<"avgWait" | "medianWait" | "p95Wait">("avgWait");
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -50,6 +71,30 @@ export default function Analytics() {
     { storeId: storeIdNum },
     { enabled: isAuthenticated && storeIdNum > 0 }
   );
+
+  const { data: periodAnalytics, isLoading: periodLoading } = trpc.analytics.period.useQuery(
+    { storeId: storeIdNum, startDate, endDate },
+    { enabled: isAuthenticated && storeIdNum > 0 && Boolean(startDate && endDate) }
+  );
+
+  const { data: waitTimeStats, isLoading: waitTimeLoading } = trpc.analytics.waitTimeByHour.useQuery(
+    { storeId: storeIdNum, startDate, endDate },
+    { enabled: isAuthenticated && storeIdNum > 0 && Boolean(startDate && endDate) }
+  );
+
+  const handlePeriodChange = (value: string) => {
+    setPeriod(value);
+    if (value === "custom") return;
+    const rangeLookup: Record<string, number> = {
+      "1d": 0,
+      "7d": 6,
+      "30d": 29,
+      "90d": 89,
+    };
+    const range = getRangeFromToday(rangeLookup[value] ?? 6);
+    setStartDate(range.start);
+    setEndDate(range.end);
+  };
 
   if (authLoading || storeLoading) {
     return (
@@ -76,31 +121,31 @@ export default function Analytics() {
     );
   }
 
-  // Sample data for charts (will be replaced with real data)
-  const waitTimeData = [
-    { hour: '10:00', avgWait: 15 },
-    { hour: '11:00', avgWait: 22 },
-    { hour: '12:00', avgWait: 35 },
-    { hour: '13:00', avgWait: 28 },
-    { hour: '14:00', avgWait: 18 },
-    { hour: '15:00', avgWait: 12 },
-    { hour: '16:00', avgWait: 10 },
-    { hour: '17:00', avgWait: 15 },
-    { hour: '18:00', avgWait: 32 },
-    { hour: '19:00', avgWait: 45 },
-    { hour: '20:00', avgWait: 38 },
-    { hour: '21:00', avgWait: 20 },
-  ];
+  const waitTimeByHour = useMemo(() => {
+    if (!waitTimeStats) {
+      return { data: [], seatTypeNames: [] as string[] };
+    }
+    const seatTypeNames = new Set<string>();
+    const grouped = new Map<number, Record<string, number | string>>();
+    waitTimeStats.forEach((stat) => {
+      const seatTypeName = stat.seatTypeName ?? "未指定";
+      seatTypeNames.add(seatTypeName);
+      const entry = grouped.get(stat.hour) ?? { hour: stat.hour, hourLabel: `${stat.hour}:00` };
+      entry[seatTypeName] = stat[waitTimeMetric];
+      grouped.set(stat.hour, entry);
+    });
+    const data = Array.from(grouped.values()).sort((a, b) => Number(a.hour) - Number(b.hour));
+    return {
+      data,
+      seatTypeNames: Array.from(seatTypeNames).sort((a, b) => a.localeCompare(b, "ja")),
+    };
+  }, [waitTimeStats, waitTimeMetric]);
 
-  const dailyData = [
-    { date: '12/25', parties: 45, seated: 42, noshow: 3 },
-    { date: '12/26', parties: 52, seated: 48, noshow: 4 },
-    { date: '12/27', parties: 38, seated: 36, noshow: 2 },
-    { date: '12/28', parties: 61, seated: 57, noshow: 4 },
-    { date: '12/29', parties: 55, seated: 52, noshow: 3 },
-    { date: '12/30', parties: 48, seated: 45, noshow: 3 },
-    { date: '12/31', parties: 42, seated: 40, noshow: 2 },
-  ];
+  const dailyData = periodAnalytics?.map((item) => ({
+    date: item.date,
+    seated: item.seatedCount ?? 0,
+    noshow: item.noshowCount ?? 0,
+  })) ?? [];
 
   const statusDistribution = [
     { name: '着席', value: 85 },
@@ -144,22 +189,46 @@ export default function Analytics() {
             </div>
           </div>
           
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1d">今日</SelectItem>
-              <SelectItem value="7d">過去7日</SelectItem>
-              <SelectItem value="30d">過去30日</SelectItem>
-              <SelectItem value="90d">過去90日</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Input
+                type="date"
+                value={startDate}
+                className="w-[140px]"
+                onChange={(event) => {
+                  setStartDate(event.target.value);
+                  setPeriod("custom");
+                }}
+              />
+              <span>〜</span>
+              <Input
+                type="date"
+                value={endDate}
+                className="w-[140px]"
+                onChange={(event) => {
+                  setEndDate(event.target.value);
+                  setPeriod("custom");
+                }}
+              />
+            </div>
+            <Select value={period} onValueChange={handlePeriodChange}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1d">今日</SelectItem>
+                <SelectItem value="7d">過去7日</SelectItem>
+                <SelectItem value="30d">過去30日</SelectItem>
+                <SelectItem value="90d">過去90日</SelectItem>
+                <SelectItem value="custom">カスタム</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </header>
 
       <main className="container py-6">
-        {analyticsLoading ? (
+        {analyticsLoading || periodLoading || waitTimeLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
@@ -242,29 +311,52 @@ export default function Analytics() {
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              {/* Wait Time by Hour */}
+              {/* Wait Time by Hour and Seat Type */}
               <Card>
                 <CardHeader>
-                  <CardTitle>時間帯別平均待ち時間</CardTitle>
-                  <CardDescription>各時間帯の平均待ち時間（分）</CardDescription>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <CardTitle>時間帯別・席種別待ち時間</CardTitle>
+                      <CardDescription>選択した指標の待ち時間（分）</CardDescription>
+                    </div>
+                    <Select value={waitTimeMetric} onValueChange={(value) => setWaitTimeMetric(value as "avgWait" | "medianWait" | "p95Wait")}>
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="avgWait">平均</SelectItem>
+                        <SelectItem value="medianWait">中央値</SelectItem>
+                        <SelectItem value="p95Wait">P95</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={waitTimeData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="hour" fontSize={12} />
-                        <YAxis fontSize={12} />
-                        <Tooltip />
-                        <Line 
-                          type="monotone" 
-                          dataKey="avgWait" 
-                          stroke="#3b82f6" 
-                          strokeWidth={2}
-                          dot={{ fill: '#3b82f6' }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    {waitTimeByHour.data.length === 0 ? (
+                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                        表示できる待ち時間データがありません
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={waitTimeByHour.data}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="hourLabel" fontSize={12} />
+                          <YAxis fontSize={12} />
+                          <Tooltip />
+                          {waitTimeByHour.seatTypeNames.map((seatTypeName, index) => (
+                            <Line
+                              key={seatTypeName}
+                              type="monotone"
+                              dataKey={seatTypeName}
+                              stroke={COLORS[index % COLORS.length]}
+                              strokeWidth={2}
+                              dot={{ fill: COLORS[index % COLORS.length] }}
+                            />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </CardContent>
               </Card>
