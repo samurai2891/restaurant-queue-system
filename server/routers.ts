@@ -491,6 +491,75 @@ const partyRouter = router({
       };
     }),
 
+  // ゲスト用: 到着報告（公開API）
+  guestArrive: publicProcedure
+    .input(z.object({ accessToken: z.string() }))
+    .mutation(async ({ input }) => {
+      const party = await db.getPartyByAccessToken(input.accessToken);
+      if (!party) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+
+      if (party.status === "arrived") {
+        return { success: true };
+      }
+
+      if (party.status === "seated") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "すでにご案内済みのため到着報告できません" });
+      }
+      if (party.status === "canceled" || party.status === "noshow") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "受付が終了しているため到着報告できません" });
+      }
+
+      const previousStatus = party.status;
+      await db.updatePartyStatus(party.id, "arrived");
+
+      await db.createAuditLog({
+        storeId: party.storeId,
+        userId: null,
+        action: "party.arrived",
+        targetType: "party",
+        targetId: party.id,
+        details: { previousStatus, newStatus: "arrived", via: "guest" },
+      });
+
+      return { success: true };
+    }),
+
+  // ゲスト用: キャンセル（公開API）
+  guestCancel: publicProcedure
+    .input(z.object({ accessToken: z.string() }))
+    .mutation(async ({ input }) => {
+      const party = await db.getPartyByAccessToken(input.accessToken);
+      if (!party) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+
+      if (party.status === "canceled") {
+        return { success: true };
+      }
+      if (party.status === "seated") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "すでにご案内済みのためキャンセルできません" });
+      }
+      if (party.status === "noshow") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "受付が終了しているためキャンセルできません" });
+      }
+
+      const previousStatus = party.status;
+      await db.updatePartyStatus(party.id, "canceled");
+
+      await db.createAuditLog({
+        storeId: party.storeId,
+        userId: null,
+        action: "party.canceled",
+        targetType: "party",
+        targetId: party.id,
+        details: { previousStatus, newStatus: "canceled", via: "guest" },
+      });
+
+      return { success: true };
+    }),
+
   // スタッフ用: ステータス更新
   updateStatus: protectedProcedure
     .input(z.object({
