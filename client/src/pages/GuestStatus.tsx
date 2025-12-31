@@ -218,7 +218,7 @@ export default function GuestStatus() {
         </Card>
 
         {/* Pre-order CTA */}
-        {canOrder && (
+        {canOrder ? (
           <Card className="mb-6 border-primary/30 bg-primary/5">
             <CardContent className="pt-6">
               <div className="flex items-center gap-4">
@@ -234,6 +234,27 @@ export default function GuestStatus() {
               </div>
               <Link href={`/guest/menu/${accessToken}`}>
                 <Button className="w-full mt-4">
+                  メニューを見る・注文する
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        ) : isActive && (
+          <Card className="mb-6 border-muted">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                  <ChefHat className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">メニューを先にチェック</p>
+                  <p className="text-sm text-muted-foreground">
+                    順番が近づくと事前注文が可能になります
+                  </p>
+                </div>
+              </div>
+              <Link href={`/guest/menu/${accessToken}`}>
+                <Button variant="outline" className="w-full mt-4">
                   メニューを見る
                 </Button>
               </Link>
