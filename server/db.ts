@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, lte, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -589,13 +589,55 @@ export async function createAuditLog(data: InsertAuditLog) {
   return result[0].insertId;
 }
 
-export async function getAuditLogsByStoreId(storeId: number, limit = 100) {
+type AuditLogFilters = {
+  startDate?: Date;
+  endDate?: Date;
+  action?: string;
+  userId?: number;
+};
+
+type AuditLogCursor = {
+  createdAt: Date;
+  id: number;
+};
+
+type AuditLogQueryOptions = {
+  limit?: number;
+  cursor?: AuditLogCursor;
+  filters?: AuditLogFilters;
+};
+
+export async function getAuditLogsByStoreId(storeId: number, options: AuditLogQueryOptions = {}) {
   const db = await getDb();
   if (!db) return [];
+  const conditions = [eq(auditLogs.storeId, storeId)];
+
+  if (options.filters?.startDate) {
+    conditions.push(gte(auditLogs.createdAt, options.filters.startDate));
+  }
+  if (options.filters?.endDate) {
+    conditions.push(lte(auditLogs.createdAt, options.filters.endDate));
+  }
+  if (options.filters?.action) {
+    conditions.push(eq(auditLogs.action, options.filters.action));
+  }
+  if (options.filters?.userId) {
+    conditions.push(eq(auditLogs.userId, options.filters.userId));
+  }
+  if (options.cursor) {
+    conditions.push(or(
+      lt(auditLogs.createdAt, options.cursor.createdAt),
+      and(
+        eq(auditLogs.createdAt, options.cursor.createdAt),
+        lt(auditLogs.id, options.cursor.id)
+      )
+    ));
+  }
+
   return db.select().from(auditLogs)
-    .where(eq(auditLogs.storeId, storeId))
-    .orderBy(desc(auditLogs.createdAt))
-    .limit(limit);
+    .where(and(...conditions))
+    .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
+    .limit(options.limit ?? 100);
 }
 
 // ============================================

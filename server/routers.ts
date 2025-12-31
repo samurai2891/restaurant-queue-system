@@ -1169,12 +1169,108 @@ const subscriptionRouter = router({
 // ============================================
 const auditRouter = router({
   list: protectedProcedure
-    .input(z.object({ storeId: z.number(), limit: z.number().optional() }))
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(200).optional(),
+      cursor: z.object({
+        id: z.number(),
+        createdAt: z.string(),
+      }).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+      action: z.string().trim().min(1).optional(),
+      userId: z.number().optional(),
+    }))
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      return db.getAuditLogsByStoreId(input.storeId, input.limit || 100);
+      const limit = input.limit ?? 50;
+      const cursor = input.cursor ? {
+        id: input.cursor.id,
+        createdAt: new Date(input.cursor.createdAt),
+      } : undefined;
+      const filters = {
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+        action: input.action,
+        userId: input.userId,
+      };
+      const logs = await db.getAuditLogsByStoreId(input.storeId, {
+        limit: limit + 1,
+        cursor,
+        filters,
+      });
+      const items = logs.slice(0, limit);
+      const lastItem = items[items.length - 1];
+      return {
+        items,
+        nextCursor: logs.length > limit && lastItem
+          ? { id: lastItem.id, createdAt: lastItem.createdAt.toISOString() }
+          : undefined,
+      };
+    }),
+  export: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(5000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+      action: z.string().trim().min(1).optional(),
+      userId: z.number().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const filters = {
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+        action: input.action,
+        userId: input.userId,
+      };
+      const logs = await db.getAuditLogsByStoreId(input.storeId, {
+        limit: input.limit ?? 1000,
+        filters,
+      });
+      const header = ["日時", "ユーザー", "アクション", "対象", "詳細"];
+      const rows = logs.map((log) => {
+        const target = log.targetType
+          ? `${log.targetType}${log.targetId ? `#${log.targetId}` : ""}`
+          : "";
+        const details = log.details ? JSON.stringify(log.details) : "";
+        return [
+          log.createdAt.toISOString(),
+          log.userId ? String(log.userId) : "system",
+          log.action,
+          target,
+          details,
+        ].map(escapeCsv).join(",");
+      });
+      const csv = [header.map(escapeCsv).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `audit-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
     }),
 });
+
+const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDateInput(value: string | undefined, boundary: "start" | "end") {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  if (dateOnlyPattern.test(value)) {
+    if (boundary === "start") {
+      date.setUTCHours(0, 0, 0, 0);
+    } else {
+      date.setUTCHours(23, 59, 59, 999);
+    }
+  }
+  return date;
+}
+
+function escapeCsv(value: string) {
+  return `"${value.replace(/"/g, "\"\"")}"`;
+}
 
 // ============================================
 // Public Store Info (ゲスト用)
