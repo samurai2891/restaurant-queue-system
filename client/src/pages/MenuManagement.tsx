@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { 
@@ -41,6 +42,8 @@ export default function MenuManagement() {
   const [itemPrice, setItemPrice] = useState("");
   const [itemCategoryId, setItemCategoryId] = useState("");
   const [itemPrepTime, setItemPrepTime] = useState("10");
+  const [itemImageUrl, setItemImageUrl] = useState("");
+  const [itemAllergens, setItemAllergens] = useState("");
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -79,6 +82,8 @@ export default function MenuManagement() {
       setItemPrice("");
       setItemCategoryId("");
       setItemPrepTime("10");
+      setItemImageUrl("");
+      setItemAllergens("");
       refetchItems();
     },
     onError: (error) => {
@@ -119,6 +124,11 @@ export default function MenuManagement() {
       name: itemName,
       description: itemDescription || undefined,
       price: itemPrice,
+      imageUrl: itemImageUrl || undefined,
+      allergens: itemAllergens
+        .split(",")
+        .map((allergen) => allergen.trim())
+        .filter(Boolean),
       prepTimeMinutes: parseInt(itemPrepTime),
     });
   };
@@ -258,6 +268,22 @@ export default function MenuManagement() {
                       onChange={(e) => setItemDescription(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>画像URL</Label>
+                    <Input
+                      placeholder="https://example.com/menu.jpg"
+                      value={itemImageUrl}
+                      onChange={(e) => setItemImageUrl(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>アレルゲン（カンマ区切り）</Label>
+                    <Input
+                      placeholder="卵, 乳, 小麦"
+                      value={itemAllergens}
+                      onChange={(e) => setItemAllergens(e.target.value)}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>価格（税込）*</Label>
@@ -385,6 +411,15 @@ export default function MenuManagement() {
                               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                                 {item.description}
                               </p>
+                            )}
+                            {Array.isArray(item.allergens) && item.allergens.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {item.allergens.map((allergen: string, index: number) => (
+                                  <Badge key={`${item.id}-allergen-${index}`} variant="outline" className="text-xs">
+                                    {allergen}
+                                  </Badge>
+                                ))}
+                              </div>
                             )}
                             <p className="text-xs text-muted-foreground mt-1">
                               調理時間: {item.prepTimeMinutes}分
