@@ -14,6 +14,7 @@ import {
   Clock, 
   Settings, 
   ChefHat,
+  Utensils,
   BarChart3,
   LogOut,
   Loader2
@@ -232,6 +233,12 @@ export default function Dashboard() {
                       <Button variant="outline" className="w-full justify-start gap-2">
                         <ChefHat className="w-4 h-4" />
                         キッチン
+                      </Button>
+                    </Link>
+                    <Link href={`/menu/${store.id}`}>
+                      <Button variant="outline" className="w-full justify-start gap-2">
+                        <Utensils className="w-4 h-4" />
+                        メニュー管理
                       </Button>
                     </Link>
                     <Link href={`/analytics/${store.id}`}>
