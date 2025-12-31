@@ -76,6 +76,18 @@ export default function QueueManagement() {
     { enabled: isAuthenticated && storeIdNum > 0 }
   );
 
+  const partySizeNumber = Number.parseInt(partySize, 10);
+  const filteredSeatTypes = seatTypes?.filter(
+    seatType =>
+      partySizeNumber >= seatType.minPartySize && partySizeNumber <= seatType.maxPartySize
+  ) ?? [];
+
+  useEffect(() => {
+    if (preferredSeatTypeId && !filteredSeatTypes.some(seatType => String(seatType.id) === preferredSeatTypeId)) {
+      setPreferredSeatTypeId("");
+    }
+  }, [filteredSeatTypes, preferredSeatTypeId]);
+
   const createPartyMutation = trpc.party.create.useMutation({
     onSuccess: (data) => {
       toast.success(`受付番号 ${data.ticketNumber} で登録しました`);
@@ -341,18 +353,27 @@ export default function QueueManagement() {
                 {seatTypes && seatTypes.length > 0 && (
                   <div className="space-y-2">
                     <Label>希望席種</Label>
-                    <Select value={preferredSeatTypeId} onValueChange={setPreferredSeatTypeId}>
+                    <Select
+                      value={preferredSeatTypeId}
+                      onValueChange={setPreferredSeatTypeId}
+                      disabled={filteredSeatTypes.length === 0}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="選択してください" />
+                        <SelectValue placeholder={filteredSeatTypes.length === 0 ? "該当する席種がありません" : "選択してください"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {seatTypes.map(st => (
+                        {filteredSeatTypes.map(st => (
                           <SelectItem key={st.id} value={String(st.id)}>
                             {st.name} ({st.minPartySize}〜{st.maxPartySize}名)
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {filteredSeatTypes.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        選択した人数に合う席種がありません。
+                      </p>
+                    )}
                   </div>
                 )}
                 <div className="space-y-2">

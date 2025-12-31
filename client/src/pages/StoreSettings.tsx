@@ -59,6 +59,9 @@ export default function StoreSettings() {
   const [storeEmail, setStoreEmail] = useState("");
   const [orderReleaseRank, setOrderReleaseRank] = useState("5");
   const [orderReleaseMinutes, setOrderReleaseMinutes] = useState("15");
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [lineChannelAccessToken, setLineChannelAccessToken] = useState("");
+  const [lineChannelSecret, setLineChannelSecret] = useState("");
 
   useEffect(() => {
     if (store) {
@@ -69,6 +72,9 @@ export default function StoreSettings() {
       setStoreEmail(store.email || "");
       setOrderReleaseRank(String(store.orderReleaseRank || 5));
       setOrderReleaseMinutes(String(store.orderReleaseMinutes || 15));
+      setSmsEnabled(store.smsEnabled ?? false);
+      setLineChannelAccessToken(store.lineChannelAccessToken || "");
+      setLineChannelSecret(store.lineChannelSecret || "");
     }
   }, [store]);
 
@@ -117,6 +123,15 @@ export default function StoreSettings() {
       email: storeEmail || undefined,
       orderReleaseRank: parseInt(orderReleaseRank),
       orderReleaseMinutes: parseInt(orderReleaseMinutes),
+    });
+  };
+
+  const handleSaveNotifications = () => {
+    updateStoreMutation.mutate({
+      id: storeIdNum,
+      smsEnabled,
+      lineChannelAccessToken: lineChannelAccessToken || undefined,
+      lineChannelSecret: lineChannelSecret || undefined,
     });
   };
 
@@ -388,7 +403,7 @@ export default function StoreSettings() {
                       電話番号宛にSMSで通知を送信します
                     </p>
                   </div>
-                  <Switch checked={store?.smsEnabled ?? false} />
+                  <Switch checked={smsEnabled} onCheckedChange={setSmsEnabled} />
                 </div>
 
                 <div className="p-4 border rounded-lg">
@@ -402,7 +417,8 @@ export default function StoreSettings() {
                       <Input
                         type="password"
                         placeholder="LINE Developers で取得"
-                        defaultValue={store?.lineChannelAccessToken || ""}
+                        value={lineChannelAccessToken}
+                        onChange={(e) => setLineChannelAccessToken(e.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
@@ -410,7 +426,8 @@ export default function StoreSettings() {
                       <Input
                         type="password"
                         placeholder="LINE Developers で取得"
-                        defaultValue={store?.lineChannelSecret || ""}
+                        value={lineChannelSecret}
+                        onChange={(e) => setLineChannelSecret(e.target.value)}
                       />
                     </div>
                   </div>
@@ -419,26 +436,45 @@ export default function StoreSettings() {
                 <div>
                   <h3 className="font-medium mb-4">通知テンプレート</h3>
                   <div className="space-y-3">
-                    <div className="p-4 border rounded-lg">
-                      <p className="font-medium">受付完了通知</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {"受付番号{{ticketNumber}}番でお受けしました。順番が近づきましたらお知らせします。"}
-                      </p>
-                    </div>
-                    <div className="p-4 border rounded-lg">
-                      <p className="font-medium">呼び出し通知</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {"{{ticketNumber}}番のお客様、お席の準備ができました。店頭までお越しください。"}
-                      </p>
-                    </div>
-                    <div className="p-4 border rounded-lg">
-                      <p className="font-medium">再呼び出し通知</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {"{{ticketNumber}}番のお客様、再度お呼び出しです。5分以内にお越しください。"}
-                      </p>
-                    </div>
+                    {templates && templates.length > 0 ? (
+                      templates.map((template) => (
+                        <div key={template.id} className="p-4 border rounded-lg">
+                          <p className="font-medium">{template.name}</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {template.template}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <>
+                        <div className="p-4 border rounded-lg">
+                          <p className="font-medium">受付完了通知</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {"受付番号{{ticketNumber}}番でお受けしました。順番が近づきましたらお知らせします。"}
+                          </p>
+                        </div>
+                        <div className="p-4 border rounded-lg">
+                          <p className="font-medium">呼び出し通知</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {"{{ticketNumber}}番のお客様、お席の準備ができました。店頭までお越しください。"}
+                          </p>
+                        </div>
+                        <div className="p-4 border rounded-lg">
+                          <p className="font-medium">再呼び出し通知</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {"{{ticketNumber}}番のお客様、再度お呼び出しです。5分以内にお越しください。"}
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
+
+                <Button onClick={handleSaveNotifications} disabled={updateStoreMutation.isPending}>
+                  {updateStoreMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <Save className="w-4 h-4 mr-2" />
+                  保存
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

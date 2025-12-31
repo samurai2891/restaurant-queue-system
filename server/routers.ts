@@ -8,6 +8,7 @@ import * as db from "./db";
 import { nanoid } from "nanoid";
 import { createCheckoutSession, createPortalSession, stripe } from "./stripe/stripe";
 import { SUBSCRIPTION_PLANS, getPlanByPriceId } from "./stripe/products";
+import { sendNotificationWithRetry } from "./_core/guestNotification";
 
 // ============================================
 // Helper: Check store access
@@ -22,6 +23,22 @@ async function checkStoreAccess(userId: number, storeId: number, requiredRoles?:
   }
   return staff;
 }
+
+const isOrderReleaseAllowed = (
+  store: Awaited<ReturnType<typeof db.getStoreById>>,
+  position: number,
+  estimatedWaitMinutes: number | null | undefined
+) => {
+  if (!store || position <= 0) return false;
+  const rankThreshold = store.orderReleaseRank ?? 0;
+  const minutesThreshold = store.orderReleaseMinutes ?? 0;
+  const byRank = rankThreshold > 0 && position <= rankThreshold;
+  const byMinutes = minutesThreshold > 0
+    && estimatedWaitMinutes !== null
+    && estimatedWaitMinutes !== undefined
+    && estimatedWaitMinutes <= minutesThreshold;
+  return byRank || byMinutes;
+};
 
 // ============================================
 // Store Router
@@ -326,12 +343,32 @@ const partyRouter = router({
       
       // 受付停止チェック
       const store = await db.getStoreById(input.storeId);
+      if (!store) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "店舗が見つかりません" });
+      }
       if (store?.isReceptionPaused) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "現在受付を停止しています" });
       }
+
+      if (store.maxQueueSize && store.maxQueueSize > 0) {
+        const activeCount = await db.getActivePartyCount(input.storeId);
+        if (activeCount >= store.maxQueueSize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "受付上限に達しています" });
+        }
+      }
+
+      if (input.preferredSeatTypeId) {
+        const seatType = await db.getSeatTypeById(input.preferredSeatTypeId);
+        if (!seatType || seatType.storeId !== input.storeId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "指定された席種が利用できません" });
+        }
+        if (input.partySize < seatType.minPartySize || input.partySize > seatType.maxPartySize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "席種の人数条件に一致しません" });
+        }
+      }
       
       // 待ち時間推定
-      let estimatedWaitMinutes = 0;
+      let estimatedWaitMinutes: number | null = null;
       if (input.preferredSeatTypeId) {
         estimatedWaitMinutes = await db.calculateEstimatedWaitTime(input.storeId, input.preferredSeatTypeId);
       }
@@ -376,9 +413,25 @@ const partyRouter = router({
       if (store.isReceptionPaused) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "現在受付を停止しています" });
       }
+      if (store.maxQueueSize && store.maxQueueSize > 0) {
+        const activeCount = await db.getActivePartyCount(input.storeId);
+        if (activeCount >= store.maxQueueSize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "受付上限に達しています" });
+        }
+      }
+
+      if (input.preferredSeatTypeId) {
+        const seatType = await db.getSeatTypeById(input.preferredSeatTypeId);
+        if (!seatType || seatType.storeId !== input.storeId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "指定された席種が利用できません" });
+        }
+        if (input.partySize < seatType.minPartySize || input.partySize > seatType.maxPartySize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "席種の人数条件に一致しません" });
+        }
+      }
       
       // 待ち時間推定
-      let estimatedWaitMinutes = 0;
+      let estimatedWaitMinutes: number | null = null;
       if (input.preferredSeatTypeId) {
         estimatedWaitMinutes = await db.calculateEstimatedWaitTime(input.storeId, input.preferredSeatTypeId);
       }
@@ -408,7 +461,12 @@ const partyRouter = router({
       const store = await db.getStoreById(party.storeId);
       
       // 注文可能かチェック
-      const canOrder = store && position > 0 && position <= (store.orderReleaseRank || 5);
+      const estimatedWaitMinutes = party.estimatedWaitMinutes ?? (
+        party.preferredSeatTypeId
+          ? await db.calculateEstimatedWaitTime(party.storeId, party.preferredSeatTypeId)
+          : null
+      );
+      const canOrder = isOrderReleaseAllowed(store, position, estimatedWaitMinutes);
       
       // 席種名取得
       let preferredSeatTypeName = null;
@@ -422,7 +480,7 @@ const partyRouter = router({
         status: party.status,
         partySize: party.partySize,
         position,
-        estimatedWaitMinutes: party.estimatedWaitMinutes,
+        estimatedWaitMinutes: estimatedWaitMinutes ?? party.estimatedWaitMinutes ?? 0,
         canOrder,
         storeName: store?.name,
         storeId: party.storeId,
@@ -544,10 +602,10 @@ const notificationRouter = router({
       
       // テンプレートからメッセージを生成
       let message = input.message;
+      const store = await db.getStoreById(input.storeId);
       if (!message) {
         const template = await db.getDefaultTemplate(input.storeId, input.type, input.channel);
         if (template) {
-          const store = await db.getStoreById(input.storeId);
           message = template.template
             .replace(/\{\{ticketNumber\}\}/g, String(party.ticketNumber))
             .replace(/\{\{guestName\}\}/g, party.guestName || "お客様")
@@ -578,12 +636,30 @@ const notificationRouter = router({
         status: "pending",
       });
       
-      // TODO: 実際のSMS/LINE/メール送信処理
-      // ここでは送信成功として記録
-      await db.updateNotification(notificationId, {
-        status: "sent",
-        sentAt: new Date(),
+      if (!store) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "店舗が見つかりません" });
+      }
+
+      const sendResult = await sendNotificationWithRetry({
+        channel: input.channel,
+        recipient,
+        message,
+        subject: undefined,
+        store,
       });
+
+      if (sendResult.status === "sent") {
+        await db.updateNotification(notificationId, {
+          status: "sent",
+          sentAt: new Date(),
+          externalId: sendResult.externalId,
+        });
+      } else {
+        await db.updateNotification(notificationId, {
+          status: "failed",
+          errorMessage: sendResult.errorMessage,
+        });
+      }
       
       await db.createAuditLog({
         storeId: input.storeId,
@@ -591,9 +667,16 @@ const notificationRouter = router({
         action: "notification.send",
         targetType: "notification",
         targetId: notificationId,
-        details: { type: input.type, channel: input.channel },
+        details: { type: input.type, channel: input.channel, status: sendResult.status },
       });
-      
+
+      if (sendResult.status === "failed") {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: sendResult.errorMessage || "通知送信に失敗しました",
+        });
+      }
+
       return { id: notificationId, success: true };
     }),
 
@@ -778,8 +861,13 @@ const orderRouter = router({
       // 注文可能かチェック
       const store = await db.getStoreById(party.storeId);
       const position = await db.getPartyPosition(party.id, party.storeId);
-      
-      if (!store || position > (store.orderReleaseRank || 5)) {
+      const estimatedWaitMinutes = party.estimatedWaitMinutes ?? (
+        party.preferredSeatTypeId
+          ? await db.calculateEstimatedWaitTime(party.storeId, party.preferredSeatTypeId)
+          : null
+      );
+
+      if (!store || !isOrderReleaseAllowed(store, position, estimatedWaitMinutes)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
       }
       
@@ -789,8 +877,12 @@ const orderRouter = router({
       
       for (const item of input.items) {
         const menuItem = await db.getMenuItemById(item.menuItemId);
-        if (!menuItem || !menuItem.isAvailable) {
+        if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
+        }
+
+        if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
         }
         
         const unitPrice = Number(menuItem.price);
@@ -836,6 +928,7 @@ const orderRouter = router({
           orderId: orderResult.id,
           ...itemData,
         });
+        await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
       }
       
       return {

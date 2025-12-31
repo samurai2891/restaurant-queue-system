@@ -20,8 +20,7 @@ import {
   UtensilsCrossed,
   Sparkles,
   Info,
-  X,
-  Store
+  X
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
@@ -42,6 +41,7 @@ interface MenuItem {
   price: string;
   imageUrl: string | null;
   isAvailable: boolean;
+  stockCount: number | null;
   categoryId: number;
   prepTimeMinutes: number | null;
   allergens: unknown;
@@ -91,10 +91,29 @@ export default function GuestMenu() {
     }
   });
 
+  const getStockLimit = (item: MenuItem) =>
+    item.stockCount === null || item.stockCount === undefined ? Number.POSITIVE_INFINITY : item.stockCount;
+
+  const getStockLimitForMenuItem = (menuItemId: number) => {
+    const menuItem = items?.find((item: MenuItem) => item.id === menuItemId);
+    if (!menuItem) return Number.POSITIVE_INFINITY;
+    return getStockLimit(menuItem);
+  };
+
   // カートに追加
   const addToCart = (item: MenuItem) => {
+    if (!item.isAvailable || (item.stockCount !== null && item.stockCount <= 0)) {
+      toast.error("売切れのため追加できません");
+      return;
+    }
     setCart(prev => {
       const existing = prev.find(c => c.menuItemId === item.id);
+      const stockLimit = getStockLimit(item);
+      const nextQuantity = (existing?.quantity || 0) + 1;
+      if (nextQuantity > stockLimit) {
+        toast.error("在庫が不足しています");
+        return prev;
+      }
       if (existing) {
         return prev.map(c => 
           c.menuItemId === item.id 
@@ -124,6 +143,10 @@ export default function GuestMenu() {
       return prev.map(item => {
         if (item.menuItemId === menuItemId) {
           const newQty = item.quantity + delta;
+          if (delta > 0 && item.quantity >= getStockLimitForMenuItem(menuItemId)) {
+            toast.error("在庫が不足しています");
+            return item;
+          }
           return newQty > 0 ? { ...item, quantity: newQty } : item;
         }
         return item;
@@ -182,8 +205,8 @@ export default function GuestMenu() {
   }
 
   // 注文可否の判定
-  const canOrder = status?.canOrder;
   const isActive = status?.status === "waiting" || status?.status === "notified" || status?.status === "arrived";
+  const canOrder = Boolean(status?.canOrder && isActive);
 
   // 注文完了画面
   if (isOrderComplete) {
@@ -340,14 +363,15 @@ export default function GuestMenu() {
             {filteredItems.map((item: MenuItem) => {
               const cartItem = cart.find(c => c.menuItemId === item.id);
               const inCart = !!cartItem;
+              const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
 
               return (
                 <Card 
                   key={item.id} 
                   className={`overflow-hidden transition-all duration-200 ${
-                    !item.isAvailable ? 'opacity-60' : 'hover:shadow-lg cursor-pointer'
+                    isSoldOut ? 'opacity-60' : 'hover:shadow-lg cursor-pointer'
                   } ${inCart ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-                  onClick={() => item.isAvailable && setSelectedItem(item)}
+                  onClick={() => setSelectedItem(item)}
                 >
                   <CardContent className="p-0">
                     <div className="flex">
@@ -364,7 +388,7 @@ export default function GuestMenu() {
                             <ImageIcon className="w-10 h-10 text-muted-foreground/50" />
                           </div>
                         )}
-                        {!item.isAvailable && (
+                        {isSoldOut && (
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                             <Badge variant="secondary" className="bg-white">売切れ</Badge>
                           </div>
@@ -393,19 +417,26 @@ export default function GuestMenu() {
                           <p className="text-xl font-bold text-primary">
                             ¥{Number(item.price).toLocaleString()}
                           </p>
-                          {item.isAvailable && canOrder && (
-                            <Button 
-                              size="sm"
-                              className="rounded-full"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addToCart(item);
-                              }}
-                            >
-                              <Plus className="w-4 h-4 mr-1" />
-                              追加
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {item.stockCount !== null && item.stockCount > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                残り{item.stockCount}
+                              </Badge>
+                            )}
+                            {!isSoldOut && canOrder && (
+                              <Button 
+                                size="sm"
+                                className="rounded-full"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToCart(item);
+                                }}
+                              >
+                                <Plus className="w-4 h-4 mr-1" />
+                                追加
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -474,10 +505,14 @@ export default function GuestMenu() {
                   </p>
                 )}
 
-
+                {selectedItem.stockCount !== null && (
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    {selectedItem.stockCount > 0 ? `残り${selectedItem.stockCount}点` : "現在売切れです"}
+                  </div>
+                )}
 
                 {/* カートに追加ボタン */}
-                {canOrder && (
+                {canOrder && selectedItem.isAvailable && (selectedItem.stockCount === null || selectedItem.stockCount > 0) && (
                   <Button 
                     className="w-full mt-6 h-12 text-lg rounded-xl"
                     onClick={() => {
