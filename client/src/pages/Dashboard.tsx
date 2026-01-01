@@ -16,6 +16,7 @@ import {
   ChefHat,
   Utensils,
   BarChart3,
+  Download,
   LogOut,
   Loader2
 } from "lucide-react";
@@ -251,6 +252,12 @@ export default function Dashboard() {
                       <Button variant="outline" className="w-full justify-start gap-2">
                         <Settings className="w-4 h-4" />
                         設定
+                      </Button>
+                    </Link>
+                    <Link href={`/export/${store.id}`}>
+                      <Button variant="outline" className="w-full justify-start gap-2">
+                        <Download className="w-4 h-4" />
+                        データ出力
                       </Button>
                     </Link>
                   </div>

@@ -12,6 +12,7 @@ import StoreSettings from "./pages/StoreSettings";
 import MenuManagement from "./pages/MenuManagement";
 import KitchenDisplay from "./pages/KitchenDisplay";
 import Analytics from "./pages/Analytics";
+import DataExport from "./pages/DataExport";
 import GuestRegister from "./pages/GuestRegister";
 import GuestStatus from "./pages/GuestStatus";
 import GuestMenu from "./pages/GuestMenu";
@@ -65,6 +66,13 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Analytics />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/export/:storeId">
+        {() => (
+          <DashboardLayout>
+            <DataExport />
           </DashboardLayout>
         )}
       </Route>
