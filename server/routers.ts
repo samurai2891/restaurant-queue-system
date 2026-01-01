@@ -24,6 +24,149 @@ async function checkStoreAccess(userId: number, storeId: number, requiredRoles?:
   return staff;
 }
 
+const buildOrderItemsData = async (
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>
+) => {
+  let totalAmount = 0;
+  const orderItemsData = [];
+
+  for (const item of items) {
+    const menuItem = await db.getMenuItemById(item.menuItemId);
+    if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
+    }
+
+    if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
+    }
+
+    const unitPrice = Number(menuItem.price);
+    let modifierPrice = 0;
+
+    if (item.modifiers && Array.isArray(item.modifiers)) {
+      const modifiers = await db.getMenuModifiersByItemId(item.menuItemId);
+      for (const modId of item.modifiers) {
+        const mod = modifiers.find(m => m.id === modId);
+        if (mod) {
+          modifierPrice += Number(mod.price || 0);
+        }
+      }
+    }
+
+    const subtotal = (unitPrice + modifierPrice) * item.quantity;
+    totalAmount += subtotal;
+
+    orderItemsData.push({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      unitPrice: String(unitPrice),
+      modifiers: item.modifiers,
+      modifierPrice: String(modifierPrice),
+      subtotal: String(subtotal),
+      notes: item.notes,
+    });
+  }
+
+  return { totalAmount, orderItemsData };
+};
+
+const createOrderWithItems = async ({
+  storeId,
+  partyId,
+  items,
+  notes,
+  orderType,
+}: {
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+  orderType: "dine_in" | "preorder";
+}) => {
+  const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
+
+  const orderResult = await db.createOrder({
+    storeId,
+    partyId,
+    totalAmount: String(totalAmount),
+    notes,
+    orderType,
+  });
+
+  for (const itemData of orderItemsData) {
+    await db.createOrderItem({
+      orderId: orderResult.id,
+      ...itemData,
+    });
+    await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
+  }
+
+  return { orderResult, totalAmount };
+};
+
+const createStaffOrder = async ({
+  userId,
+  storeId,
+  partyId,
+  items,
+  notes,
+}: {
+  userId: number;
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+}) => {
+  await checkStoreAccess(userId, storeId);
+
+  const party = await db.getPartyById(partyId);
+  if (!party || party.storeId !== storeId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+  }
+
+  if (party.status === "canceled" || party.status === "noshow") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+  }
+
+  const { orderResult, totalAmount } = await createOrderWithItems({
+    storeId: party.storeId,
+    partyId: party.id,
+    items,
+    notes,
+    orderType: party.status === "seated" ? "dine_in" : "preorder",
+  });
+
+  await db.createAuditLog({
+    storeId,
+    userId,
+    action: "order.create",
+    targetType: "order",
+    targetId: orderResult.id,
+    details: { partyId: party.id, totalAmount },
+  });
+
+  return {
+    orderId: orderResult.id,
+    orderNumber: orderResult.orderNumber,
+    totalAmount,
+  };
+};
+
 const isOrderReleaseAllowed = (
   store: Awaited<ReturnType<typeof db.getStoreById>>,
   position: number,
@@ -940,66 +1083,14 @@ const orderRouter = router({
       if (!store || !isOrderReleaseAllowed(store, position, estimatedWaitMinutes)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
       }
-      
-      // 合計金額計算
-      let totalAmount = 0;
-      const orderItemsData = [];
-      
-      for (const item of input.items) {
-        const menuItem = await db.getMenuItemById(item.menuItemId);
-        if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
-        }
 
-        if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
-        }
-        
-        const unitPrice = Number(menuItem.price);
-        let modifierPrice = 0;
-        
-        // モディファイア価格計算
-        if (item.modifiers && Array.isArray(item.modifiers)) {
-          for (const modId of item.modifiers) {
-            const modifiers = await db.getMenuModifiersByItemId(item.menuItemId);
-            const mod = modifiers.find(m => m.id === modId);
-            if (mod) {
-              modifierPrice += Number(mod.price || 0);
-            }
-          }
-        }
-        
-        const subtotal = (unitPrice + modifierPrice) * item.quantity;
-        totalAmount += subtotal;
-        
-        orderItemsData.push({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          unitPrice: String(unitPrice),
-          modifiers: item.modifiers,
-          modifierPrice: String(modifierPrice),
-          subtotal: String(subtotal),
-          notes: item.notes,
-        });
-      }
-      
-      // 注文作成
-      const orderResult = await db.createOrder({
+      const { orderResult, totalAmount } = await createOrderWithItems({
         storeId: party.storeId,
         partyId: party.id,
-        totalAmount: String(totalAmount),
+        items: input.items,
         notes: input.notes,
         orderType: party.status === "seated" ? "dine_in" : "preorder",
       });
-      
-      // 注文明細作成
-      for (const itemData of orderItemsData) {
-        await db.createOrderItem({
-          orderId: orderResult.id,
-          ...itemData,
-        });
-        await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
-      }
       
       return {
         orderId: orderResult.id,
@@ -1021,89 +1112,34 @@ const orderRouter = router({
       })),
       notes: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId);
+    .mutation(async ({ ctx, input }) => createStaffOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+    })),
 
-      const party = await db.getPartyById(input.partyId);
-      if (!party || party.storeId !== input.storeId) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
-      }
-
-      if (party.status === "canceled" || party.status === "noshow") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
-      }
-
-      let totalAmount = 0;
-      const orderItemsData = [];
-
-      for (const item of input.items) {
-        const menuItem = await db.getMenuItemById(item.menuItemId);
-        if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
-        }
-
-        if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
-        }
-
-        const unitPrice = Number(menuItem.price);
-        let modifierPrice = 0;
-
-        if (item.modifiers && Array.isArray(item.modifiers)) {
-          for (const modId of item.modifiers) {
-            const modifiers = await db.getMenuModifiersByItemId(item.menuItemId);
-            const mod = modifiers.find(m => m.id === modId);
-            if (mod) {
-              modifierPrice += Number(mod.price || 0);
-            }
-          }
-        }
-
-        const subtotal = (unitPrice + modifierPrice) * item.quantity;
-        totalAmount += subtotal;
-
-        orderItemsData.push({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          unitPrice: String(unitPrice),
-          modifiers: item.modifiers,
-          modifierPrice: String(modifierPrice),
-          subtotal: String(subtotal),
-          notes: item.notes,
-        });
-      }
-
-      const orderResult = await db.createOrder({
-        storeId: party.storeId,
-        partyId: party.id,
-        totalAmount: String(totalAmount),
-        notes: input.notes,
-        orderType: party.status === "seated" ? "dine_in" : "preorder",
-      });
-
-      for (const itemData of orderItemsData) {
-        await db.createOrderItem({
-          orderId: orderResult.id,
-          ...itemData,
-        });
-        await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
-      }
-
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "order.create",
-        targetType: "order",
-        targetId: orderResult.id,
-        details: { partyId: party.id, totalAmount },
-      });
-
-      return {
-        orderId: orderResult.id,
-        orderNumber: orderResult.orderNumber,
-        totalAmount,
-      };
-    }),
+  // スタッフ用: 注文作成（保護API）
+  createProtected: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createStaffOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+    })),
 
   // 注文ステータス更新
   updateStatus: protectedProcedure
