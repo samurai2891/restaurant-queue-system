@@ -1008,6 +1008,103 @@ const orderRouter = router({
       };
     }),
 
+  // スタッフ用: 注文作成
+  createByStaff: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const party = await db.getPartyById(input.partyId);
+      if (!party || party.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+
+      if (party.status === "canceled" || party.status === "noshow") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+      }
+
+      let totalAmount = 0;
+      const orderItemsData = [];
+
+      for (const item of input.items) {
+        const menuItem = await db.getMenuItemById(item.menuItemId);
+        if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
+        }
+
+        if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
+        }
+
+        const unitPrice = Number(menuItem.price);
+        let modifierPrice = 0;
+
+        if (item.modifiers && Array.isArray(item.modifiers)) {
+          for (const modId of item.modifiers) {
+            const modifiers = await db.getMenuModifiersByItemId(item.menuItemId);
+            const mod = modifiers.find(m => m.id === modId);
+            if (mod) {
+              modifierPrice += Number(mod.price || 0);
+            }
+          }
+        }
+
+        const subtotal = (unitPrice + modifierPrice) * item.quantity;
+        totalAmount += subtotal;
+
+        orderItemsData.push({
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+          unitPrice: String(unitPrice),
+          modifiers: item.modifiers,
+          modifierPrice: String(modifierPrice),
+          subtotal: String(subtotal),
+          notes: item.notes,
+        });
+      }
+
+      const orderResult = await db.createOrder({
+        storeId: party.storeId,
+        partyId: party.id,
+        totalAmount: String(totalAmount),
+        notes: input.notes,
+        orderType: party.status === "seated" ? "dine_in" : "preorder",
+      });
+
+      for (const itemData of orderItemsData) {
+        await db.createOrderItem({
+          orderId: orderResult.id,
+          ...itemData,
+        });
+        await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
+      }
+
+      await db.createAuditLog({
+        storeId: input.storeId,
+        userId: ctx.user.id,
+        action: "order.create",
+        targetType: "order",
+        targetId: orderResult.id,
+        details: { partyId: party.id, totalAmount },
+      });
+
+      return {
+        orderId: orderResult.id,
+        orderNumber: orderResult.orderNumber,
+        totalAmount,
+      };
+    }),
+
   // 注文ステータス更新
   updateStatus: protectedProcedure
     .input(z.object({

@@ -29,6 +29,7 @@ import {
   LogOut,
   PanelLeft,
   Settings,
+  ShoppingCart,
   UtensilsCrossed,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -118,7 +119,7 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const storeIdMatch = location.match(
-    /\/(queue|menu|kitchen|analytics|settings|export)\/([^/]+)/
+    /\/(queue|menu|cashier|kitchen|analytics|settings|export)\/([^/]+)/
   );
   const storeId = storeIdMatch?.[2];
 
@@ -132,6 +133,11 @@ function DashboardLayoutContent({
       icon: UtensilsCrossed,
       label: "メニュー管理",
       path: storeId ? `/menu/${storeId}` : "/menu",
+    },
+    {
+      icon: ShoppingCart,
+      label: "注文受付",
+      path: storeId ? `/cashier/${storeId}` : "/cashier",
     },
     {
       icon: ChefHat,

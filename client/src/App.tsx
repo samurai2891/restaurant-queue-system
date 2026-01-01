@@ -16,6 +16,7 @@ import DataExport from "./pages/DataExport";
 import GuestRegister from "./pages/GuestRegister";
 import GuestStatus from "./pages/GuestStatus";
 import GuestMenu from "./pages/GuestMenu";
+import Cashier from "./pages/Cashier";
 import About from "./pages/About";
 import Pricing from "./pages/Pricing";
 
@@ -52,6 +53,13 @@ function Router() {
         {() => (
           <DashboardLayout>
             <MenuManagement />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/cashier/:storeId">
+        {() => (
+          <DashboardLayout>
+            <Cashier />
           </DashboardLayout>
         )}
       </Route>
