@@ -28,6 +28,7 @@ import {
   LogOut,
   PanelLeft,
   Settings,
+  Download,
   UtensilsCrossed,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -117,7 +118,7 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const storeIdMatch = location.match(
-    /\/(queue|menu|kitchen|analytics|settings)\/([^/]+)/
+    /\/(queue|menu|kitchen|analytics|data|settings)\/([^/]+)/
   );
   const storeId = storeIdMatch?.[2];
 
@@ -141,6 +142,11 @@ function DashboardLayoutContent({
       icon: BarChart3,
       label: "分析",
       path: storeId ? `/analytics/${storeId}` : "/analytics",
+    },
+    {
+      icon: Download,
+      label: "データダウンロード",
+      path: storeId ? `/data/${storeId}` : "/data",
     },
     {
       icon: Settings,

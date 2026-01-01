@@ -580,6 +580,158 @@ export async function updateOrderItem(id: number, data: Partial<InsertOrderItem>
 }
 
 // ============================================
+// Data Export Functions
+// ============================================
+export async function getAllPartiesByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(parties)
+    .where(eq(parties.storeId, storeId))
+    .orderBy(desc(parties.registeredAt));
+}
+
+export async function getNotificationsByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(notifications)
+    .where(eq(notifications.storeId, storeId))
+    .orderBy(desc(notifications.createdAt));
+}
+
+export async function getAllOrdersByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(orders)
+    .where(eq(orders.storeId, storeId))
+    .orderBy(desc(orders.orderedAt));
+}
+
+export async function getOrderItemsByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const results = await db.select({
+    id: orderItems.id,
+    orderId: orderItems.orderId,
+    menuItemId: orderItems.menuItemId,
+    quantity: orderItems.quantity,
+    unitPrice: orderItems.unitPrice,
+    modifiers: orderItems.modifiers,
+    modifierPrice: orderItems.modifierPrice,
+    subtotal: orderItems.subtotal,
+    notes: orderItems.notes,
+    status: orderItems.status,
+    createdAt: orderItems.createdAt,
+    updatedAt: orderItems.updatedAt,
+  })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(eq(orders.storeId, storeId))
+    .orderBy(desc(orderItems.createdAt));
+  return results;
+}
+
+export async function getSubscriptionsByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(subscriptions)
+    .where(eq(subscriptions.storeId, storeId))
+    .orderBy(desc(subscriptions.createdAt));
+}
+
+export async function getDailyAnalyticsByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(dailyAnalytics)
+    .where(eq(dailyAnalytics.storeId, storeId))
+    .orderBy(desc(dailyAnalytics.date));
+}
+
+// ============================================
+// Data Retention Functions
+// ============================================
+const getAffectedRows = (result: unknown): number => {
+  if (Array.isArray(result) && result[0] && typeof result[0].affectedRows === "number") {
+    return result[0].affectedRows;
+  }
+  return 0;
+};
+
+export async function deletePartiesBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete parties: database not available");
+    return 0;
+  }
+  const result = await db.delete(parties).where(lt(parties.registeredAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteNotificationsBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete notifications: database not available");
+    return 0;
+  }
+  const result = await db.delete(notifications).where(lt(notifications.createdAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteOrderItemsBeforeOrderDate(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete order items: database not available");
+    return 0;
+  }
+  const result = await db.execute(sql`
+    delete from ${orderItems}
+    where ${orderItems.orderId} in (
+      select ${orders.id} from ${orders} where ${orders.orderedAt} < ${cutoff}
+    )
+  `);
+  return getAffectedRows(result);
+}
+
+export async function deleteOrdersBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete orders: database not available");
+    return 0;
+  }
+  const result = await db.delete(orders).where(lt(orders.orderedAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteAuditLogsBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete audit logs: database not available");
+    return 0;
+  }
+  const result = await db.delete(auditLogs).where(lt(auditLogs.createdAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteSubscriptionsBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete subscriptions: database not available");
+    return 0;
+  }
+  const result = await db.delete(subscriptions).where(lt(subscriptions.createdAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteDailyAnalyticsBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete daily analytics: database not available");
+    return 0;
+  }
+  const result = await db.delete(dailyAnalytics).where(lt(dailyAnalytics.createdAt, cutoff));
+  return getAffectedRows(result);
+}
+
+// ============================================
 // Audit Log Functions
 // ============================================
 export async function createAuditLog(data: InsertAuditLog) {
