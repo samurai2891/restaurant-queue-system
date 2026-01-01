@@ -17,6 +17,7 @@ import GuestRegister from "./pages/GuestRegister";
 import GuestStatus from "./pages/GuestStatus";
 import GuestMenu from "./pages/GuestMenu";
 import Cashier from "./pages/Cashier";
+import Register from "./pages/Register";
 import About from "./pages/About";
 import Pricing from "./pages/Pricing";
 
@@ -60,6 +61,13 @@ function Router() {
         {() => (
           <DashboardLayout>
             <Cashier />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/register/:storeId">
+        {() => (
+          <DashboardLayout>
+            <Register />
           </DashboardLayout>
         )}
       </Route>

@@ -25,6 +25,7 @@ import {
   BarChart3,
   ChefHat,
   ClipboardList,
+  CreditCard,
   Download,
   LogOut,
   PanelLeft,
@@ -119,11 +120,16 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const storeIdMatch = location.match(
-    /\/(queue|menu|cashier|kitchen|analytics|settings|export)\/([^/]+)/
+    /\/(register|queue|menu|cashier|kitchen|analytics|settings|export)\/([^/]+)/
   );
   const storeId = storeIdMatch?.[2];
 
   const menuItems = [
+    {
+      icon: CreditCard,
+      label: "レジ",
+      path: storeId ? `/register/${storeId}` : "/register",
+    },
     {
       icon: ClipboardList,
       label: "キュー管理",
