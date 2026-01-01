@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
 import { trpc } from "@/lib/trpc";
 import { 
   ArrowLeft,
@@ -22,31 +23,9 @@ import {
   Info,
   X
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { toast } from "sonner";
-
-interface CartItem {
-  menuItemId: number;
-  name: string;
-  price: number;
-  quantity: number;
-  imageUrl?: string | null;
-}
-
-interface MenuItem {
-  id: number;
-  name: string;
-  description: string | null;
-  price: string;
-  imageUrl: string | null;
-  isAvailable: boolean;
-  stockCount: number | null;
-  categoryId: number;
-  prepTimeMinutes: number | null;
-  allergens: unknown;
-  calories: unknown;
-}
 
 interface Category {
   id: number;
@@ -56,7 +35,6 @@ interface Category {
 
 export default function GuestMenu() {
   const { accessToken } = useParams<{ accessToken: string }>();
-  const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrderComplete, setIsOrderComplete] = useState(false);
@@ -78,10 +56,20 @@ export default function GuestMenu() {
     { enabled: !!status?.storeId }
   );
 
+  const {
+    cart,
+    addToCart,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    totalAmount,
+    totalItems,
+  } = useMenuCart(items);
+
   const createOrderMutation = trpc.order.create.useMutation({
     onSuccess: () => {
       setIsOrderComplete(true);
-      setCart([]);
+      clearCart();
       setNotes("");
       setIsCartOpen(false);
       toast.success("注文を送信しました！");
@@ -90,84 +78,6 @@ export default function GuestMenu() {
       toast.error(`エラー: ${error.message}`);
     }
   });
-
-  const getStockLimit = (item: MenuItem) =>
-    item.stockCount === null || item.stockCount === undefined ? Number.POSITIVE_INFINITY : item.stockCount;
-
-  const getStockLimitForMenuItem = (menuItemId: number) => {
-    const menuItem = items?.find((item: MenuItem) => item.id === menuItemId);
-    if (!menuItem) return Number.POSITIVE_INFINITY;
-    return getStockLimit(menuItem);
-  };
-
-  // カートに追加
-  const addToCart = (item: MenuItem) => {
-    if (!item.isAvailable || (item.stockCount !== null && item.stockCount <= 0)) {
-      toast.error("売切れのため追加できません");
-      return;
-    }
-    setCart(prev => {
-      const existing = prev.find(c => c.menuItemId === item.id);
-      const stockLimit = getStockLimit(item);
-      const nextQuantity = (existing?.quantity || 0) + 1;
-      if (nextQuantity > stockLimit) {
-        toast.error("在庫が不足しています");
-        return prev;
-      }
-      if (existing) {
-        return prev.map(c => 
-          c.menuItemId === item.id 
-            ? { ...c, quantity: c.quantity + 1 }
-            : c
-        );
-      }
-      return [...prev, { 
-        menuItemId: item.id, 
-        name: item.name, 
-        price: Number(item.price), 
-        quantity: 1,
-        imageUrl: item.imageUrl
-      }];
-    });
-    toast.success(`${item.name}をカートに追加しました`, {
-      action: {
-        label: "カートを見る",
-        onClick: () => setIsCartOpen(true)
-      }
-    });
-  };
-
-  // 数量変更
-  const updateQuantity = (menuItemId: number, delta: number) => {
-    setCart(prev => {
-      return prev.map(item => {
-        if (item.menuItemId === menuItemId) {
-          const newQty = item.quantity + delta;
-          if (delta > 0 && item.quantity >= getStockLimitForMenuItem(menuItemId)) {
-            toast.error("在庫が不足しています");
-            return item;
-          }
-          return newQty > 0 ? { ...item, quantity: newQty } : item;
-        }
-        return item;
-      }).filter(item => item.quantity > 0);
-    });
-  };
-
-  // カートから削除
-  const removeFromCart = (menuItemId: number) => {
-    setCart(prev => prev.filter(item => item.menuItemId !== menuItemId));
-    toast.info("商品を削除しました");
-  };
-
-  // カートをクリア
-  const clearCart = () => {
-    setCart([]);
-    toast.info("カートをクリアしました");
-  };
-
-  const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   // 注文送信
   const handleSubmitOrder = () => {
@@ -429,7 +339,9 @@ export default function GuestMenu() {
                                 className="rounded-full"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  addToCart(item);
+                                  addToCart(item, {
+                                    onActionClick: () => setIsCartOpen(true),
+                                  });
                                 }}
                               >
                                 <Plus className="w-4 h-4 mr-1" />
@@ -516,7 +428,9 @@ export default function GuestMenu() {
                   <Button 
                     className="w-full mt-6 h-12 text-lg rounded-xl"
                     onClick={() => {
-                      addToCart(selectedItem);
+                      addToCart(selectedItem, {
+                        onActionClick: () => setIsCartOpen(true),
+                      });
                       setSelectedItem(null);
                     }}
                   >
