@@ -294,6 +294,27 @@ export async function getPartiesByStoreId(storeId: number, status?: string[]) {
   return query;
 }
 
+export async function getPartiesForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(parties.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(parties.registeredAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(parties.registeredAt, options.endDate));
+  }
+
+  return db.select().from(parties)
+    .where(and(...conditions))
+    .orderBy(desc(parties.registeredAt))
+    .limit(options.limit ?? 5000);
+}
+
 export async function getActivePartyCount(storeId: number) {
   const parties = await getPartiesByStoreId(storeId);
   return parties.filter(p => ["waiting", "notified", "arrived"].includes(p.status)).length;
@@ -367,6 +388,27 @@ export async function getNotificationsByPartyId(partyId: number) {
   return db.select().from(notifications)
     .where(eq(notifications.partyId, partyId))
     .orderBy(desc(notifications.createdAt));
+}
+
+export async function getNotificationsForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(notifications.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(notifications.createdAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(notifications.createdAt, options.endDate));
+  }
+
+  return db.select().from(notifications)
+    .where(and(...conditions))
+    .orderBy(desc(notifications.createdAt))
+    .limit(options.limit ?? 5000);
 }
 
 export async function updateNotification(id: number, data: Partial<InsertNotification>) {
@@ -546,6 +588,27 @@ export async function getOrdersByStoreId(storeId: number, status?: string[]) {
     .orderBy(desc(orders.orderedAt));
 }
 
+export async function getOrdersForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(orders.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(orders.orderedAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(orders.orderedAt, options.endDate));
+  }
+
+  return db.select().from(orders)
+    .where(and(...conditions))
+    .orderBy(desc(orders.orderedAt))
+    .limit(options.limit ?? 5000);
+}
+
 export async function getOrdersByPartyId(partyId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -571,6 +634,32 @@ export async function getOrderItemsByOrderId(orderId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+}
+
+export async function getOrderItemsForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(orders.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(orders.orderedAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(orders.orderedAt, options.endDate));
+  }
+
+  return db.select({
+    order: orders,
+    item: orderItems,
+  })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(...conditions))
+    .orderBy(desc(orders.orderedAt), desc(orderItems.id))
+    .limit(options.limit ?? 5000);
 }
 
 export async function updateOrderItem(id: number, data: Partial<InsertOrderItem>) {

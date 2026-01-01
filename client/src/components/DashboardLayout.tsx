@@ -25,6 +25,7 @@ import {
   BarChart3,
   ChefHat,
   ClipboardList,
+  Download,
   LogOut,
   PanelLeft,
   Settings,
@@ -117,7 +118,7 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const storeIdMatch = location.match(
-    /\/(queue|menu|kitchen|analytics|settings)\/([^/]+)/
+    /\/(queue|menu|kitchen|analytics|settings|export)\/([^/]+)/
   );
   const storeId = storeIdMatch?.[2];
 
@@ -146,6 +147,11 @@ function DashboardLayoutContent({
       icon: Settings,
       label: "設定",
       path: storeId ? `/settings/${storeId}` : "/settings",
+    },
+    {
+      icon: Download,
+      label: "データ出力",
+      path: storeId ? `/export/${storeId}` : "/export",
     },
   ];
 

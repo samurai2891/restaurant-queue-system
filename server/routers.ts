@@ -1332,6 +1332,234 @@ const auditRouter = router({
     }),
 });
 
+// ============================================
+// Data Export Router
+// ============================================
+const dataExportRouter = router({
+  parties: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const parties = await db.getPartiesForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "ID",
+        "受付番号",
+        "ステータス",
+        "ゲスト名",
+        "人数",
+        "子供人数",
+        "電話番号",
+        "メール",
+        "希望席種ID",
+        "割当席種ID",
+        "優先度",
+        "備考",
+        "アレルギー",
+        "受付日時",
+        "呼出日時",
+        "到着日時",
+        "着席日時",
+        "完了日時",
+        "作成日時",
+        "更新日時",
+      ];
+      const rows = parties.map((party) => [
+        party.id,
+        party.ticketNumber,
+        party.status,
+        party.guestName ?? "",
+        party.partySize,
+        party.childCount ?? "",
+        party.phone ?? "",
+        party.email ?? "",
+        party.preferredSeatTypeId ?? "",
+        party.assignedSeatTypeId ?? "",
+        party.priority ?? "",
+        party.notes ?? "",
+        party.allergies ?? "",
+        party.registeredAt?.toISOString() ?? "",
+        party.notifiedAt?.toISOString() ?? "",
+        party.arrivedAt?.toISOString() ?? "",
+        party.seatedAt?.toISOString() ?? "",
+        party.completedAt?.toISOString() ?? "",
+        party.createdAt?.toISOString() ?? "",
+        party.updatedAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `parties-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+  notifications: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const notifications = await db.getNotificationsForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "ID",
+        "受付ID",
+        "通知タイプ",
+        "チャネル",
+        "送信先",
+        "件名",
+        "本文",
+        "ステータス",
+        "エラー",
+        "外部ID",
+        "送信日時",
+        "配信完了日時",
+        "作成日時",
+      ];
+      const rows = notifications.map((notification) => [
+        notification.id,
+        notification.partyId,
+        notification.type,
+        notification.channel,
+        notification.recipient,
+        notification.subject ?? "",
+        notification.message,
+        notification.status,
+        notification.errorMessage ?? "",
+        notification.externalId ?? "",
+        notification.sentAt?.toISOString() ?? "",
+        notification.deliveredAt?.toISOString() ?? "",
+        notification.createdAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `notifications-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+  orders: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const orders = await db.getOrdersForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "ID",
+        "受付ID",
+        "注文番号",
+        "ステータス",
+        "注文区分",
+        "合計金額",
+        "メモ",
+        "注文日時",
+        "確定日時",
+        "調理完了日時",
+        "提供日時",
+        "作成日時",
+        "更新日時",
+      ];
+      const rows = orders.map((order) => [
+        order.id,
+        order.partyId,
+        order.orderNumber,
+        order.status,
+        order.orderType ?? "",
+        order.totalAmount ?? "",
+        order.notes ?? "",
+        order.orderedAt?.toISOString() ?? "",
+        order.confirmedAt?.toISOString() ?? "",
+        order.preparedAt?.toISOString() ?? "",
+        order.servedAt?.toISOString() ?? "",
+        order.createdAt?.toISOString() ?? "",
+        order.updatedAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `orders-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+  orderItems: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const orderItems = await db.getOrderItemsForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "注文明細ID",
+        "注文ID",
+        "注文番号",
+        "受付ID",
+        "商品ID",
+        "数量",
+        "単価",
+        "モディファイア",
+        "モディファイア料金",
+        "小計",
+        "ステータス",
+        "メモ",
+        "注文日時",
+        "作成日時",
+        "更新日時",
+      ];
+      const rows = orderItems.map((row) => [
+        row.item.id,
+        row.order.id,
+        row.order.orderNumber,
+        row.order.partyId,
+        row.item.menuItemId,
+        row.item.quantity,
+        row.item.unitPrice ?? "",
+        row.item.modifiers ? JSON.stringify(row.item.modifiers) : "",
+        row.item.modifierPrice ?? "",
+        row.item.subtotal ?? "",
+        row.item.status,
+        row.item.notes ?? "",
+        row.order.orderedAt?.toISOString() ?? "",
+        row.item.createdAt?.toISOString() ?? "",
+        row.item.updatedAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `order-items-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+});
+
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseDateInput(value: string | undefined, boundary: "start" | "end") {
@@ -1350,6 +1578,11 @@ function parseDateInput(value: string | undefined, boundary: "start" | "end") {
 
 function escapeCsv(value: string) {
   return `"${value.replace(/"/g, "\"\"")}"`;
+}
+
+function formatCsvValue(value: unknown) {
+  if (value === null || value === undefined) return escapeCsv("");
+  return escapeCsv(String(value));
 }
 
 // ============================================
@@ -1418,6 +1651,7 @@ export const appRouter = router({
   order: { ...orderRouter, guestCreate: orderRouter.create, kitchen: orderRouter.list },
   analytics: analyticsRouter,
   audit: auditRouter,
+  dataExport: dataExportRouter,
   publicStore: publicStoreRouter,
   subscription: subscriptionRouter,
 });
