@@ -1,8 +1,8 @@
 項目,テーブル,保持期間,基準日,削除方法
-顧客受付（ゲスト情報/待ち行列）,parties,3か月,registeredAt,定期ジョブで期限超過分を削除
-通知履歴（SMS/LINE/Email）,notifications,3か月,createdAt,定期ジョブで期限超過分を削除
+顧客受付（ゲスト情報/待ち行列）,parties,2週間,registeredAt,定期ジョブで期限超過分を削除
+通知履歴（SMS/LINE/Email）,notifications,2週間,createdAt,定期ジョブで期限超過分を削除
 売上/注文ヘッダ,orders,18か月,orderedAt,定期ジョブで期限超過分を削除
 売上/注文明細,order_items,18か月,orders.orderedAt,orders削除に連動して削除
-監査ログ,audit_logs,18か月,createdAt,定期ジョブで期限超過分を削除
-サブスクリプション履歴,subscriptions,18か月,createdAt,定期ジョブで期限超過分を削除
-日次集計（分析）,daily_analytics,18か月,createdAt,定期ジョブで期限超過分を削除
+監査ログ,audit_logs,2週間,createdAt,定期ジョブで期限超過分を削除
+サブスクリプション履歴,subscriptions,1年,createdAt,定期ジョブで期限超過分を削除
+日次集計（分析）,daily_analytics,6か月,createdAt,定期ジョブで期限超過分を削除

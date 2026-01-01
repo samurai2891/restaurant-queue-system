@@ -11,7 +11,8 @@ import {
 type RetentionPolicy = {
   label: string;
   table: string;
-  months: number;
+  months?: number;
+  days?: number;
   basis: string;
   deleteBefore: (cutoff: Date) => Promise<number>;
 };
@@ -20,14 +21,14 @@ const RETENTION_POLICIES: RetentionPolicy[] = [
   {
     label: "顧客受付（ゲスト情報/待ち行列）",
     table: "parties",
-    months: 3,
+    days: 14,
     basis: "registeredAt",
     deleteBefore: deletePartiesBefore,
   },
   {
     label: "通知履歴（SMS/LINE/Email）",
     table: "notifications",
-    months: 3,
+    days: 14,
     basis: "createdAt",
     deleteBefore: deleteNotificationsBefore,
   },
@@ -48,21 +49,21 @@ const RETENTION_POLICIES: RetentionPolicy[] = [
   {
     label: "監査ログ",
     table: "audit_logs",
-    months: 18,
+    days: 14,
     basis: "createdAt",
     deleteBefore: deleteAuditLogsBefore,
   },
   {
     label: "サブスクリプション履歴",
     table: "subscriptions",
-    months: 18,
+    months: 12,
     basis: "createdAt",
     deleteBefore: deleteSubscriptionsBefore,
   },
   {
     label: "日次集計（分析）",
     table: "daily_analytics",
-    months: 18,
+    months: 6,
     basis: "createdAt",
     deleteBefore: deleteDailyAnalyticsBefore,
   },
@@ -80,7 +81,9 @@ export async function runDataRetentionPurge() {
   const now = new Date();
   console.log(`[Retention] Starting purge at ${now.toISOString()}`);
   for (const policy of RETENTION_POLICIES) {
-    const cutoff = subtractMonths(now, policy.months);
+    const cutoff = policy.days
+      ? new Date(now.getTime() - policy.days * ONE_DAY_MS)
+      : subtractMonths(now, policy.months ?? 0);
     const deleted = await policy.deleteBefore(cutoff);
     console.log(
       `[Retention] ${policy.label} (${policy.table}) < ${cutoff.toISOString()} deleted=${deleted}`
