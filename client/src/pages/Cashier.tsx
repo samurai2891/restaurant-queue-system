@@ -2,7 +2,6 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -47,7 +46,6 @@ export default function Cashier() {
   const { loading: authLoading, isAuthenticated } = useAuth();
 
   const [activeCategory, setActiveCategory] = useState("all");
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [partyMode, setPartyMode] = useState<"existing" | "new">("existing");
   const [selectedPartyId, setSelectedPartyId] = useState<string>("");
   const [newPartyName, setNewPartyName] = useState("");
@@ -273,13 +271,12 @@ export default function Cashier() {
                   <Card
                     key={item.id}
                     className={`overflow-hidden transition-all duration-200 ${
-                      isSoldOut ? "opacity-60" : "hover:shadow-lg cursor-pointer"
+                      isSoldOut ? "opacity-60" : "hover:shadow-lg"
                     } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
-                    onClick={() => setSelectedItem(item)}
                   >
                     <CardContent className="p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="space-y-2">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-2 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-bold text-base line-clamp-2">{item.name}</h3>
                             {inCart && (
@@ -292,32 +289,64 @@ export default function Cashier() {
                             ¥{Number(item.price).toLocaleString()}
                           </p>
                           <div className="flex flex-wrap items-center gap-2">
-                            {isSoldOut ? (
-                              <Badge variant="secondary">売切れ</Badge>
-                            ) : item.stockCount !== null ? (
+                            {isSoldOut && <Badge variant="secondary">売切れ</Badge>}
+                            {!isSoldOut && item.stockCount !== null && (
                               <Badge variant="outline" className="text-xs">
                                 残り{item.stockCount}
                               </Badge>
-                            ) : (
+                            )}
+                            {!isSoldOut && item.stockCount === null && (
                               <Badge variant="outline" className="text-xs">
                                 在庫あり
                               </Badge>
                             )}
                           </div>
                         </div>
-                        {!isSoldOut && (
-                          <Button
-                            size="lg"
-                            className="h-12 px-6 rounded-xl"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              addToCart(item);
-                            }}
-                          >
-                            <Plus className="w-5 h-5 mr-2" />
-                            追加
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-3 min-w-[180px]">
+                          {inCart && !isSoldOut ? (
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="w-12 h-12 rounded-full"
+                                onClick={() => {
+                                  if (cartItem?.quantity === 1) {
+                                    removeFromCart(item.id);
+                                  } else {
+                                    updateQuantity(item.id, -1);
+                                  }
+                                }}
+                              >
+                                {cartItem?.quantity === 1 ? (
+                                  <Trash2 className="w-5 h-5 text-red-500" />
+                                ) : (
+                                  <Minus className="w-5 h-5" />
+                                )}
+                              </Button>
+                              <span className="w-10 text-center text-lg font-bold">
+                                {cartItem?.quantity}
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="w-12 h-12 rounded-full"
+                                onClick={() => updateQuantity(item.id, 1)}
+                              >
+                                <Plus className="w-5 h-5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              size="lg"
+                              className="h-12 min-h-[44px] px-6 rounded-xl"
+                              onClick={() => addToCart(item)}
+                              disabled={isSoldOut}
+                            >
+                              <Plus className="w-5 h-5 mr-2" />
+                              追加
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -473,37 +502,6 @@ export default function Cashier() {
         </div>
       </div>
 
-      <Dialog open={!!selectedItem} onOpenChange={() => setSelectedItem(null)}>
-        <DialogContent className="max-w-md p-0 overflow-hidden">
-          {selectedItem && (
-            <div className="p-6 space-y-4">
-              <div>
-                <h2 className="text-xl font-bold">{selectedItem.name}</h2>
-                <p className="text-2xl font-bold text-primary mt-2">
-                  ¥{Number(selectedItem.price).toLocaleString()}
-                </p>
-                {selectedItem.stockCount !== null && (
-                  <div className="mt-3 text-sm text-muted-foreground">
-                    {selectedItem.stockCount > 0 ? `残り${selectedItem.stockCount}点` : "現在売切れです"}
-                  </div>
-                )}
-              </div>
-              {selectedItem.isAvailable && (selectedItem.stockCount === null || selectedItem.stockCount > 0) && (
-                <Button
-                  className="w-full h-12 text-lg rounded-xl"
-                  onClick={() => {
-                    addToCart(selectedItem);
-                    setSelectedItem(null);
-                  }}
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  カートに追加
-                </Button>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
