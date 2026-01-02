@@ -4,6 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -21,7 +24,7 @@ import {
   Trash2,
   UtensilsCrossed,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
@@ -52,6 +55,9 @@ export default function Cashier() {
   const [newPartyName, setNewPartyName] = useState("");
   const [newPartySize, setNewPartySize] = useState("2");
   const [notes, setNotes] = useState("");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash");
+  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
+  const hasInitializedSelection = useRef(false);
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -73,6 +79,11 @@ export default function Cashier() {
     { enabled: isAuthenticated && storeIdNum > 0, refetchInterval: 5000 }
   );
 
+  const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = trpc.order.list.useQuery(
+    { storeId: storeIdNum },
+    { enabled: isAuthenticated && storeIdNum > 0, refetchInterval: 5000 }
+  );
+
   const {
     cart,
     addToCart,
@@ -85,6 +96,7 @@ export default function Cashier() {
 
   const createPartyMutation = trpc.party.create.useMutation();
   const createOrderMutation = trpc.order.createByStaff.useMutation();
+  const confirmPaymentBatchMutation = trpc.order.confirmPaymentBatch.useMutation();
 
   const availableParties = useMemo(
     () =>
@@ -94,16 +106,48 @@ export default function Cashier() {
     [parties]
   );
 
+  const unpaidOrders = useMemo(
+    () => (orders ?? []).filter((order) => order.paymentStatus === "unpaid"),
+    [orders]
+  );
+
+  const selectedOrders = useMemo(
+    () => unpaidOrders.filter((order) => selectedOrderIds.includes(order.id)),
+    [unpaidOrders, selectedOrderIds]
+  );
+
+  const selectedOrderTotal = useMemo(
+    () => selectedOrders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0),
+    [selectedOrders]
+  );
+
+  useEffect(() => {
+    const unpaidOrderIds = unpaidOrders.map((order) => order.id);
+    setSelectedOrderIds((current) => {
+      if (!hasInitializedSelection.current) {
+        hasInitializedSelection.current = true;
+        return unpaidOrderIds;
+      }
+      return current.filter((orderId) => unpaidOrderIds.includes(orderId));
+    });
+
+    if (unpaidOrderIds.length === 0) {
+      hasInitializedSelection.current = false;
+    }
+  }, [unpaidOrders]);
+
   const filteredItems = items?.filter((item: MenuItem) => {
     if (activeCategory === "all") return true;
     return item.categoryId === parseInt(activeCategory, 10);
   }) || [];
 
   const isSubmitting = createPartyMutation.isPending || createOrderMutation.isPending;
+  const isPaymentSubmitting = confirmPaymentBatchMutation.isPending;
   const partySizeNumber = parseInt(newPartySize, 10);
   const canSubmit = cart.length > 0 && (
     partyMode === "existing" ? Boolean(selectedPartyId) : partySizeNumber > 0
   );
+  const canConfirmPayment = selectedOrderIds.length > 0 && selectedPaymentMethod.length > 0;
   const cartDetailContent = (
     <div className="space-y-4">
       {cart.length === 0 ? (
@@ -224,6 +268,7 @@ export default function Cashier() {
         notes: notes || undefined,
       });
 
+      await refetchOrders();
       toast.success("注文を確定しました");
       clearCart();
       setNotes("");
@@ -236,6 +281,33 @@ export default function Cashier() {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "注文の作成に失敗しました";
+      toast.error(message);
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (selectedOrderIds.length === 0) {
+      toast.error("会計対象の注文を選択してください");
+      return;
+    }
+
+    if (!selectedPaymentMethod) {
+      toast.error("支払方法を選択してください");
+      return;
+    }
+
+    try {
+      await confirmPaymentBatchMutation.mutateAsync({
+        storeId: storeIdNum,
+        orderIds: selectedOrderIds,
+        paymentMethod: selectedPaymentMethod,
+      });
+
+      toast.success("会計を確定しました");
+      setSelectedOrderIds([]);
+      await refetchOrders();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "会計確定に失敗しました";
       toast.error(message);
     }
   };
@@ -502,6 +574,119 @@ export default function Cashier() {
               <CardDescription>注文内容を確認できます</CardDescription>
             </CardHeader>
             <CardContent>{cartDetailContent}</CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>会計対象</CardTitle>
+              <CardDescription>未精算の注文を選択して会計します</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>未精算注文</span>
+                <Badge variant="outline">{unpaidOrders.length}件</Badge>
+              </div>
+
+              {ordersLoading ? (
+                <div className="flex items-center justify-center py-6 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                </div>
+              ) : unpaidOrders.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  未精算の注文はありません
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {unpaidOrders.map((order) => {
+                    const isSelected = selectedOrderIds.includes(order.id);
+                    const orderTotal = Number(order.totalAmount ?? 0);
+                    const partyLabel = order.party
+                      ? `${order.party.guestName ?? "お客様"} (${order.party.partySize}名)`
+                      : "お客様";
+
+                    return (
+                      <label
+                        key={order.id}
+                        className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/40"
+                      >
+                        <Checkbox
+                          className="mt-1"
+                          checked={isSelected}
+                          onCheckedChange={(checked) => {
+                            setSelectedOrderIds((current) => {
+                              if (checked) {
+                                return Array.from(new Set([...current, order.id]));
+                              }
+                              return current.filter((orderId) => orderId !== order.id);
+                            });
+                          }}
+                        />
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">注文 #{order.orderNumber}</p>
+                              <p className="font-medium">{partyLabel}</p>
+                            </div>
+                            <Badge variant="secondary">未精算</Badge>
+                          </div>
+                          <div className="flex items-center justify-between text-sm text-muted-foreground">
+                            <span>{order.items?.length ?? 0}品</span>
+                            <span className="font-semibold text-foreground">
+                              ¥{orderTotal.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="flex items-center justify-between text-sm font-medium">
+                <span>選択中合計</span>
+                <span>¥{selectedOrderTotal.toLocaleString()}</span>
+              </div>
+
+              <div className="space-y-2">
+                <Label>支払方法</Label>
+                <RadioGroup
+                  value={selectedPaymentMethod}
+                  onValueChange={setSelectedPaymentMethod}
+                  className="space-y-2"
+                >
+                  <label className="flex items-center gap-2 rounded-md border p-3">
+                    <RadioGroupItem value="cash" id="cashier-payment-cash" />
+                    <span className="text-sm font-medium">現金</span>
+                    <Badge variant="secondary" className="ml-auto">推奨</Badge>
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md border p-3">
+                    <RadioGroupItem value="card" id="cashier-payment-card" />
+                    <span className="text-sm font-medium">クレジットカード</span>
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md border p-3">
+                    <RadioGroupItem value="qr" id="cashier-payment-qr" />
+                    <span className="text-sm font-medium">QR決済</span>
+                  </label>
+                </RadioGroup>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleConfirmPayment}
+                disabled={!canConfirmPayment || isPaymentSubmitting || ordersLoading}
+              >
+                {isPaymentSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    会計確定中...
+                  </>
+                ) : (
+                  "会計を確定"
+                )}
+              </Button>
+            </CardContent>
           </Card>
         </div>
       </div>
