@@ -1171,6 +1171,81 @@ const orderRouter = router({
       return { success: true };
     }),
 
+  // 会計確定
+  confirmPayment: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      paymentMethod: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.id);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (order.paymentStatus === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "すでに支払い済みです" });
+      }
+      if (order.paymentStatus === "voided") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払い取り消し済みの注文です" });
+      }
+
+      await db.confirmOrderPayment(order.id, {
+        paymentMethod: input.paymentMethod,
+      });
+
+      await db.createAuditLog({
+        storeId: input.storeId,
+        userId: ctx.user.id,
+        action: "order.payment.confirmed",
+        targetType: "order",
+        targetId: order.id,
+        details: {
+          previousStatus: order.paymentStatus,
+          paymentMethod: input.paymentMethod,
+        },
+      });
+
+      return { success: true };
+    }),
+
+  // 支払取り消し
+  cancelPayment: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.id);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (order.paymentStatus !== "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払い済みの注文のみ取り消せます" });
+      }
+
+      await db.cancelOrderPayment(order.id);
+
+      await db.createAuditLog({
+        storeId: input.storeId,
+        userId: ctx.user.id,
+        action: "order.payment.voided",
+        targetType: "order",
+        targetId: order.id,
+        details: {
+          previousStatus: order.paymentStatus,
+          reason: input.reason,
+        },
+      });
+
+      return { success: true };
+    }),
+
   // 注文明細ステータス更新
   updateItemStatus: protectedProcedure
     .input(z.object({
