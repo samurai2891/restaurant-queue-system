@@ -1,14 +1,44 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, CreditCard, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, Loader2, Receipt, Wallet } from "lucide-react";
 import { Link, useParams } from "wouter";
 
 export default function Register() {
   const { storeId } = useParams<{ storeId: string }>();
   const storeIdNum = parseInt(storeId || "0", 10);
   const { loading: authLoading, isAuthenticated } = useAuth();
+  const checkoutOrders = [
+    {
+      id: "ORD-102",
+      label: "テーブル3",
+      items: [
+        { name: "和牛ハンバーグ", quantity: 2, price: 1580 },
+        { name: "シーザーサラダ", quantity: 1, price: 780 },
+      ],
+    },
+    {
+      id: "ORD-103",
+      label: "テーブル5",
+      items: [
+        { name: "本日のパスタ", quantity: 1, price: 1320 },
+        { name: "ドリンクセット", quantity: 2, price: 480 },
+      ],
+    },
+  ];
+  const subtotal = checkoutOrders.reduce(
+    (total, order) =>
+      total +
+      order.items.reduce((orderTotal, item) => orderTotal + item.price * item.quantity, 0),
+    0
+  );
+  const serviceCharge = Math.round(subtotal * 0.1);
+  const grandTotal = subtotal + serviceCharge;
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -41,20 +71,115 @@ export default function Register() {
         <CardHeader>
           <div className="flex items-center gap-2 text-muted-foreground">
             <CreditCard className="h-5 w-5" />
-            <CardTitle>会計の準備中</CardTitle>
+            <CardTitle>会計処理</CardTitle>
           </div>
           <CardDescription>
-            レジ画面は現在準備中です。注文受付は「注文受付」から行えます。
+            会計対象の注文と合計金額を確認し、支払方法を選択してください。
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <Button asChild>
-              <Link href={`/cashier/${storeIdNum}`}>注文受付へ</Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={`/queue/${storeIdNum}`}>キュー管理へ</Link>
-            </Button>
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">会計対象の注文一覧</h2>
+                <Badge variant="outline">{checkoutOrders.length}件</Badge>
+              </div>
+              <div className="space-y-4">
+                {checkoutOrders.map((order) => (
+                  <div key={order.id} className="rounded-lg border bg-background p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">{order.id}</p>
+                        <p className="font-medium">{order.label}</p>
+                      </div>
+                      <Badge variant="secondary">未精算</Badge>
+                    </div>
+                    <Separator className="my-3" />
+                    <div className="space-y-2 text-sm">
+                      {order.items.map((item) => (
+                        <div key={`${order.id}-${item.name}`} className="flex items-center justify-between">
+                          <span className="text-muted-foreground">
+                            {item.name} × {item.quantity}
+                          </span>
+                          <span className="font-medium">
+                            ¥{(item.price * item.quantity).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Receipt className="h-4 w-4" />
+                  合計金額
+                </div>
+                <div className="mt-4 space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">小計</span>
+                    <span className="font-medium">¥{subtotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">サービス料</span>
+                    <span className="font-medium">¥{serviceCharge.toLocaleString()}</span>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between text-base font-semibold">
+                    <span>合計</span>
+                    <span>¥{grandTotal.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border bg-background p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Wallet className="h-4 w-4" />
+                  支払方法
+                </div>
+                <RadioGroup defaultValue="cash" className="mt-4 space-y-3">
+                  <div className="flex items-center space-x-2 rounded-md border p-3">
+                    <RadioGroupItem value="cash" id="payment-cash" />
+                    <Label htmlFor="payment-cash" className="flex-1">
+                      現金
+                    </Label>
+                    <Badge variant="secondary">推奨</Badge>
+                  </div>
+                  <div className="flex items-center space-x-2 rounded-md border p-3">
+                    <RadioGroupItem value="card" id="payment-card" />
+                    <Label htmlFor="payment-card" className="flex-1">
+                      クレジットカード
+                    </Label>
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex items-center space-x-2 rounded-md border p-3">
+                    <RadioGroupItem value="qr" id="payment-qr" />
+                    <Label htmlFor="payment-qr" className="flex-1">
+                      QR決済
+                    </Label>
+                    <span className="text-xs text-muted-foreground">Pay/IC</span>
+                  </div>
+                </RadioGroup>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-muted-foreground">
+                会計確定後は注文履歴に反映されます。
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button variant="outline" asChild>
+                  <Link href={`/queue/${storeIdNum}`}>キュー管理へ</Link>
+                </Button>
+                <Button>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  会計を確定
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
