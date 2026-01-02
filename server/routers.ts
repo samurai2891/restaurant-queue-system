@@ -151,15 +151,6 @@ const createStaffOrder = async ({
     orderType: party.status === "seated" ? "dine_in" : "preorder",
   });
 
-  await db.createAuditLog({
-    storeId,
-    userId,
-    action: "order.create",
-    targetType: "order",
-    targetId: orderResult.id,
-    details: { partyId: party.id, totalAmount },
-  });
-
   return {
     orderId: orderResult.id,
     orderNumber: orderResult.orderNumber,
@@ -206,16 +197,6 @@ const storeRouter = router({
         storeId,
         userId: ctx.user.id,
         role: "owner",
-      });
-      
-      // 監査ログ
-      await db.createAuditLog({
-        storeId,
-        userId: ctx.user.id,
-        action: "store.create",
-        targetType: "store",
-        targetId: storeId,
-        details: { name: input.name },
       });
       
       return { id: storeId };
@@ -265,16 +246,6 @@ const storeRouter = router({
       const { id, ...data } = input;
       await checkStoreAccess(ctx.user.id, id, ["owner", "manager"]);
       await db.updateStore(id, data);
-      
-      await db.createAuditLog({
-        storeId: id,
-        userId: ctx.user.id,
-        action: "store.update",
-        targetType: "store",
-        targetId: id,
-        details: data,
-      });
-      
       return { success: true };
     }),
 
@@ -283,15 +254,6 @@ const storeRouter = router({
     .mutation(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.id, ["owner", "manager", "host"]);
       await db.updateStore(input.id, { isReceptionPaused: input.paused });
-      
-      await db.createAuditLog({
-        storeId: input.id,
-        userId: ctx.user.id,
-        action: input.paused ? "store.pause_reception" : "store.resume_reception",
-        targetType: "store",
-        targetId: input.id,
-      });
-      
       return { success: true };
     }),
 });
@@ -332,16 +294,6 @@ const staffRouter = router({
       }
       
       const id = await db.addStoreStaff(input);
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "staff.add",
-        targetType: "staff",
-        targetId: id,
-        details: { role: input.role },
-      });
-      
       return { id };
     }),
 
@@ -356,16 +308,6 @@ const staffRouter = router({
       const { id, storeId, ...data } = input;
       await checkStoreAccess(ctx.user.id, storeId, ["owner", "manager"]);
       await db.updateStoreStaff(id, data);
-      
-      await db.createAuditLog({
-        storeId,
-        userId: ctx.user.id,
-        action: "staff.update",
-        targetType: "staff",
-        targetId: id,
-        details: data,
-      });
-      
       return { success: true };
     }),
 });
@@ -399,16 +341,6 @@ const seatTypeRouter = router({
         ...input,
         availableSeats: input.totalSeats,
       });
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "seat_type.create",
-        targetType: "seat_type",
-        targetId: id,
-        details: { name: input.name },
-      });
-      
       return { id };
     }),
 
@@ -430,16 +362,6 @@ const seatTypeRouter = router({
       const { id, storeId, ...data } = input;
       await checkStoreAccess(ctx.user.id, storeId, ["owner", "manager"]);
       await db.updateSeatType(id, data);
-      
-      await db.createAuditLog({
-        storeId,
-        userId: ctx.user.id,
-        action: "seat_type.update",
-        targetType: "seat_type",
-        targetId: id,
-        details: data,
-      });
-      
       return { success: true };
     }),
 });
@@ -520,16 +442,6 @@ const partyRouter = router({
         ...input,
         estimatedWaitMinutes,
       });
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "party.create",
-        targetType: "party",
-        targetId: result.id,
-        details: { ticketNumber: result.ticketNumber, partySize: input.partySize },
-      });
-      
       return result;
     }),
 
@@ -657,15 +569,6 @@ const partyRouter = router({
       const previousStatus = party.status;
       await db.updatePartyStatus(party.id, "arrived");
 
-      await db.createAuditLog({
-        storeId: party.storeId,
-        userId: null,
-        action: "party.arrived",
-        targetType: "party",
-        targetId: party.id,
-        details: { previousStatus, newStatus: "arrived", via: "guest" },
-      });
-
       return { success: true };
     }),
 
@@ -690,15 +593,6 @@ const partyRouter = router({
 
       const previousStatus = party.status;
       await db.updatePartyStatus(party.id, "canceled");
-
-      await db.createAuditLog({
-        storeId: party.storeId,
-        userId: null,
-        action: "party.canceled",
-        targetType: "party",
-        targetId: party.id,
-        details: { previousStatus, newStatus: "canceled", via: "guest" },
-      });
 
       return { success: true };
     }),
@@ -736,16 +630,6 @@ const partyRouter = router({
       if ((input.status === "canceled" || input.status === "noshow") && party.assignedSeatTypeId && previousStatus === "seated") {
         await db.updateSeatAvailability(party.assignedSeatTypeId, 1);
       }
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: `party.${input.status}`,
-        targetType: "party",
-        targetId: input.id,
-        details: { previousStatus, newStatus: input.status },
-      });
-      
       return { success: true };
     }),
 
@@ -766,15 +650,6 @@ const partyRouter = router({
       if (party.assignedSeatTypeId) {
         await db.updateSeatAvailability(party.assignedSeatTypeId, 1);
       }
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "party.release",
-        targetType: "party",
-        targetId: input.id,
-      });
-      
       return { success: true };
     }),
 });
@@ -872,15 +747,6 @@ const notificationRouter = router({
           errorMessage: sendResult.errorMessage,
         });
       }
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "notification.send",
-        targetType: "notification",
-        targetId: notificationId,
-        details: { type: input.type, channel: input.channel, status: sendResult.status },
-      });
 
       if (sendResult.status === "failed") {
         throw new TRPCError({
@@ -1159,15 +1025,6 @@ const orderRouter = router({
       if (input.status === "served") updateData.servedAt = now;
       
       await db.updateOrder(input.id, updateData);
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: `order.${input.status}`,
-        targetType: "order",
-        targetId: input.id,
-      });
-      
       return { success: true };
     }),
 
@@ -1194,18 +1051,6 @@ const orderRouter = router({
 
       await db.confirmOrderPayment(order.id, {
         paymentMethod: input.paymentMethod,
-      });
-
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "order.payment.confirmed",
-        targetType: "order",
-        targetId: order.id,
-        details: {
-          previousStatus: order.paymentStatus,
-          paymentMethod: input.paymentMethod,
-        },
       });
 
       return { success: true };
@@ -1246,18 +1091,6 @@ const orderRouter = router({
         await db.confirmOrderPayment(order.id, {
           paymentMethod: input.paymentMethod,
         });
-
-        await db.createAuditLog({
-          storeId: input.storeId,
-          userId: ctx.user.id,
-          action: "order.payment.confirmed",
-          targetType: "order",
-          targetId: order.id,
-          details: {
-            previousStatus: order.paymentStatus,
-            paymentMethod: input.paymentMethod,
-          },
-        });
       }
 
       return { success: true, orderIds: uniqueOrderIds };
@@ -1282,18 +1115,6 @@ const orderRouter = router({
       }
 
       await db.cancelOrderPayment(order.id);
-
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "order.payment.voided",
-        targetType: "order",
-        targetId: order.id,
-        details: {
-          previousStatus: order.paymentStatus,
-          reason: input.reason,
-        },
-      });
 
       return { success: true };
     }),
@@ -1501,94 +1322,6 @@ const subscriptionRouter = router({
       });
       
       return { url: session.url };
-    }),
-});
-
-// ============================================
-// Audit Log Router
-// ============================================
-const auditRouter = router({
-  list: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(200).optional(),
-      cursor: z.object({
-        id: z.number(),
-        createdAt: z.string(),
-      }).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-      action: z.string().trim().min(1).optional(),
-      userId: z.number().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const limit = input.limit ?? 50;
-      const cursor = input.cursor ? {
-        id: input.cursor.id,
-        createdAt: new Date(input.cursor.createdAt),
-      } : undefined;
-      const filters = {
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-        action: input.action,
-        userId: input.userId,
-      };
-      const logs = await db.getAuditLogsByStoreId(input.storeId, {
-        limit: limit + 1,
-        cursor,
-        filters,
-      });
-      const items = logs.slice(0, limit);
-      const lastItem = items[items.length - 1];
-      return {
-        items,
-        nextCursor: logs.length > limit && lastItem
-          ? { id: lastItem.id, createdAt: lastItem.createdAt.toISOString() }
-          : undefined,
-      };
-    }),
-  export: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(5000).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-      action: z.string().trim().min(1).optional(),
-      userId: z.number().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const filters = {
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-        action: input.action,
-        userId: input.userId,
-      };
-      const logs = await db.getAuditLogsByStoreId(input.storeId, {
-        limit: input.limit ?? 1000,
-        filters,
-      });
-      const header = ["日時", "ユーザー", "アクション", "対象", "詳細"];
-      const rows = logs.map((log) => {
-        const target = log.targetType
-          ? `${log.targetType}${log.targetId ? `#${log.targetId}` : ""}`
-          : "";
-        const details = log.details ? JSON.stringify(log.details) : "";
-        return [
-          log.createdAt.toISOString(),
-          log.userId ? String(log.userId) : "system",
-          log.action,
-          target,
-          details,
-        ].map(escapeCsv).join(",");
-      });
-      const csv = [header.map(escapeCsv).join(","), ...rows].join("\n");
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      return {
-        fileName: `audit-${input.storeId}-${dateStamp}.csv`,
-        csv,
-      };
     }),
 });
 
@@ -1910,7 +1643,6 @@ export const appRouter = router({
   menu: { ...menuRouter, guestCategories: menuRouter.categories, guestItems: menuRouter.items },
   order: { ...orderRouter, guestCreate: orderRouter.create, kitchen: orderRouter.list },
   analytics: analyticsRouter,
-  audit: auditRouter,
   dataExport: dataExportRouter,
   publicStore: publicStoreRouter,
   subscription: subscriptionRouter,

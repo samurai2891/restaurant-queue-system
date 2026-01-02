@@ -18,7 +18,7 @@ import { type ElementType, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
-type ExportType = "parties" | "notifications" | "orders" | "orderItems" | "audit";
+type ExportType = "parties" | "notifications" | "orders" | "orderItems";
 
 type ExportConfig = {
   key: ExportType;
@@ -51,12 +51,6 @@ const exportConfigs: ExportConfig[] = [
     title: "注文明細",
     description: "注文に紐づく明細をCSVで出力します。",
     icon: FileText,
-  },
-  {
-    key: "audit",
-    title: "監査ログ",
-    description: "監査ログの履歴をCSVで出力します。",
-    icon: ClipboardList,
   },
 ];
 
@@ -104,12 +98,6 @@ export default function DataExport() {
         endDate: endDate || undefined,
         limit: 5000,
       };
-      if (type === "audit") {
-        const data = await utils.client.audit.export.query(baseParams);
-        downloadCsv(data.fileName, data.csv);
-        toast.success("監査ログCSVをダウンロードしました");
-        return;
-      }
       if (type === "parties") {
         const data = await utils.client.dataExport.parties.query(baseParams);
         downloadCsv(data.fileName, data.csv);

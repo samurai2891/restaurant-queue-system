@@ -311,25 +311,6 @@ export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = typeof orderItems.$inferInsert;
 
 // ============================================
-// Audit Log (監査ログ)
-// ============================================
-export const auditLogs = mysqlTable("audit_logs", {
-  id: int("id").autoincrement().primaryKey(),
-  storeId: int("storeId").notNull(),
-  userId: int("userId"),
-  action: varchar("action", { length: 100 }).notNull(), // party.create, party.seat, order.confirm など
-  targetType: varchar("targetType", { length: 50 }), // party, order, store など
-  targetId: int("targetId"),
-  details: json("details"), // 変更前後の値など
-  ipAddress: varchar("ipAddress", { length: 45 }),
-  userAgent: text("userAgent"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-export type AuditLog = typeof auditLogs.$inferSelect;
-export type InsertAuditLog = typeof auditLogs.$inferInsert;
-
-// ============================================
 // Subscription (サブスクリプション履歴)
 // ============================================
 export const subscriptions = mysqlTable("subscriptions", {
