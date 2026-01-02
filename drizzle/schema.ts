@@ -272,6 +272,11 @@ export const orders = mysqlTable("orders", {
   notes: text("notes"),
   // 事前注文か着席後注文か
   orderType: mysqlEnum("orderType", ["preorder", "dine_in"]).default("preorder"),
+  // 支払い情報
+  paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "voided"]).default("unpaid").notNull(),
+  paymentMethod: varchar("paymentMethod", { length: 50 }),
+  paidAt: timestamp("paidAt"),
+  paymentCanceledAt: timestamp("paymentCanceledAt"),
   orderedAt: timestamp("orderedAt").defaultNow().notNull(),
   confirmedAt: timestamp("confirmedAt"),
   preparedAt: timestamp("preparedAt"),

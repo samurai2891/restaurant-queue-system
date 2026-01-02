@@ -623,6 +623,31 @@ export async function updateOrder(id: number, data: Partial<InsertOrder>) {
   await db.update(orders).set(data).where(eq(orders.id, id));
 }
 
+export async function confirmOrderPayment(
+  id: number,
+  data: { paymentMethod: string; paidAt?: Date }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({
+    paymentStatus: "paid",
+    paymentMethod: data.paymentMethod,
+    paidAt: data.paidAt ?? new Date(),
+    paymentCanceledAt: null,
+  }).where(eq(orders.id, id));
+}
+
+export async function cancelOrderPayment(id: number, data: { canceledAt?: Date } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({
+    paymentStatus: "voided",
+    paymentMethod: null,
+    paidAt: null,
+    paymentCanceledAt: data.canceledAt ?? new Date(),
+  }).where(eq(orders.id, id));
+}
+
 export async function createOrderItem(data: InsertOrderItem) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
