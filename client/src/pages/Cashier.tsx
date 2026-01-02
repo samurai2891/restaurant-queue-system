@@ -14,7 +14,6 @@ import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
   CheckCircle,
-  ImageIcon,
   Loader2,
   Minus,
   Plus,
@@ -278,70 +277,47 @@ export default function Cashier() {
                     } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
                     onClick={() => setSelectedItem(item)}
                   >
-                    <CardContent className="p-0">
-                      <div className="flex">
-                        <div className="w-28 h-28 bg-muted flex-shrink-0 relative">
-                          {item.imageUrl ? (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ImageIcon className="w-10 h-10 text-muted-foreground/50" />
-                            </div>
-                          )}
-                          {isSoldOut && (
-                            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                              <Badge variant="secondary" className="bg-white">売切れ</Badge>
-                            </div>
-                          )}
-                          {inCart && (
-                            <div className="absolute top-2 left-2">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-bold text-base line-clamp-2">{item.name}</h3>
+                            {inCart && (
                               <Badge className="bg-primary text-white">
                                 {cartItem?.quantity}点
                               </Badge>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex-1 p-4 flex flex-col justify-between">
-                          <div>
-                            <h3 className="font-bold text-base line-clamp-1">{item.name}</h3>
-                            {item.description && (
-                              <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                                {item.description}
-                              </p>
                             )}
                           </div>
-
-                          <div className="flex items-center justify-between mt-2">
-                            <p className="text-xl font-bold text-primary">
-                              ¥{Number(item.price).toLocaleString()}
-                            </p>
-                            <div className="flex items-center gap-2">
-                              {item.stockCount !== null && item.stockCount > 0 && (
-                                <Badge variant="outline" className="text-xs">
-                                  残り{item.stockCount}
-                                </Badge>
-                              )}
-                              {!isSoldOut && (
-                                <Button
-                                  size="sm"
-                                  className="rounded-full"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    addToCart(item);
-                                  }}
-                                >
-                                  <Plus className="w-4 h-4 mr-1" />
-                                  追加
-                                </Button>
-                              )}
-                            </div>
+                          <p className="text-xl font-bold text-primary">
+                            ¥{Number(item.price).toLocaleString()}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {isSoldOut ? (
+                              <Badge variant="secondary">売切れ</Badge>
+                            ) : item.stockCount !== null ? (
+                              <Badge variant="outline" className="text-xs">
+                                残り{item.stockCount}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">
+                                在庫あり
+                              </Badge>
+                            )}
                           </div>
                         </div>
+                        {!isSoldOut && (
+                          <Button
+                            size="lg"
+                            className="h-12 px-6 rounded-xl"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              addToCart(item);
+                            }}
+                          >
+                            <Plus className="w-5 h-5 mr-2" />
+                            追加
+                          </Button>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -429,20 +405,6 @@ export default function Cashier() {
                 <div className="space-y-3">
                   {cart.map((item) => (
                     <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                      <div className="w-16 h-16 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <ImageIcon className="w-6 h-6 text-muted-foreground/50" />
-                          </div>
-                        )}
-                      </div>
-
                       <div className="flex-1 min-w-0">
                         <p className="font-medium line-clamp-1">{item.name}</p>
                         <p className="text-sm text-primary font-bold">
@@ -515,27 +477,11 @@ export default function Cashier() {
         <DialogContent className="max-w-md p-0 overflow-hidden">
           {selectedItem && (
             <div className="p-6 space-y-4">
-              <div className="w-full h-48 bg-muted rounded-lg overflow-hidden">
-                {selectedItem.imageUrl ? (
-                  <img
-                    src={selectedItem.imageUrl}
-                    alt={selectedItem.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-16 h-16 text-muted-foreground/50" />
-                  </div>
-                )}
-              </div>
               <div>
                 <h2 className="text-xl font-bold">{selectedItem.name}</h2>
                 <p className="text-2xl font-bold text-primary mt-2">
                   ¥{Number(selectedItem.price).toLocaleString()}
                 </p>
-                {selectedItem.description && (
-                  <p className="text-muted-foreground mt-3">{selectedItem.description}</p>
-                )}
                 {selectedItem.stockCount !== null && (
                   <div className="mt-3 text-sm text-muted-foreground">
                     {selectedItem.stockCount > 0 ? `残り${selectedItem.stockCount}点` : "現在売切れです"}
