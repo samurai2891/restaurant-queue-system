@@ -1211,6 +1211,58 @@ const orderRouter = router({
       return { success: true };
     }),
 
+  // 会計確定（複数注文対応）
+  confirmPaymentBatch: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      orderIds: z.array(z.number().min(1)).min(1),
+      paymentMethod: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const uniqueOrderIds = Array.from(new Set(input.orderIds));
+      const orders = await Promise.all(uniqueOrderIds.map((orderId) => db.getOrderById(orderId)));
+
+      if (orders.some((order) => !order)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+
+      for (const order of orders) {
+        if (!order || order.storeId !== input.storeId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+        }
+        if (order.paymentStatus === "paid") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "すでに支払い済みの注文が含まれています" });
+        }
+        if (order.paymentStatus === "voided") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "支払い取り消し済みの注文が含まれています" });
+        }
+      }
+
+      for (const order of orders) {
+        if (!order) continue;
+
+        await db.confirmOrderPayment(order.id, {
+          paymentMethod: input.paymentMethod,
+        });
+
+        await db.createAuditLog({
+          storeId: input.storeId,
+          userId: ctx.user.id,
+          action: "order.payment.confirmed",
+          targetType: "order",
+          targetId: order.id,
+          details: {
+            previousStatus: order.paymentStatus,
+            paymentMethod: input.paymentMethod,
+          },
+        });
+      }
+
+      return { success: true, orderIds: uniqueOrderIds };
+    }),
+
   // 支払取り消し
   cancelPayment: protectedProcedure
     .input(z.object({
