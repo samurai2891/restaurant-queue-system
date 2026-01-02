@@ -13,7 +13,6 @@ import {
   menuModifiers, InsertMenuModifier,
   orders, InsertOrder,
   orderItems, InsertOrderItem,
-  auditLogs, InsertAuditLog,
   subscriptions, InsertSubscription,
   dailyAnalytics, InsertDailyAnalytics
 } from "../drizzle/schema";
@@ -748,16 +747,6 @@ export async function deleteOrdersBefore(cutoff: Date) {
   return getAffectedRows(result);
 }
 
-export async function deleteAuditLogsBefore(cutoff: Date) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot delete audit logs: database not available");
-    return 0;
-  }
-  const result = await db.delete(auditLogs).where(lt(auditLogs.createdAt, cutoff));
-  return getAffectedRows(result);
-}
-
 export async function deleteSubscriptionsBefore(cutoff: Date) {
   const db = await getDb();
   if (!db) {
@@ -776,70 +765,6 @@ export async function deleteDailyAnalyticsBefore(cutoff: Date) {
   }
   const result = await db.delete(dailyAnalytics).where(lt(dailyAnalytics.createdAt, cutoff));
   return getAffectedRows(result);
-}
-
-// ============================================
-// Audit Log Functions
-// ============================================
-export async function createAuditLog(data: InsertAuditLog) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(auditLogs).values(data);
-  return result[0].insertId;
-}
-
-type AuditLogFilters = {
-  startDate?: Date;
-  endDate?: Date;
-  action?: string;
-  userId?: number;
-};
-
-type AuditLogCursor = {
-  createdAt: Date;
-  id: number;
-};
-
-type AuditLogQueryOptions = {
-  limit?: number;
-  cursor?: AuditLogCursor;
-  filters?: AuditLogFilters;
-};
-
-export async function getAuditLogsByStoreId(storeId: number, options: AuditLogQueryOptions = {}) {
-  const db = await getDb();
-  if (!db) return [];
-  const conditions = [eq(auditLogs.storeId, storeId)];
-
-  if (options.filters?.startDate) {
-    conditions.push(gte(auditLogs.createdAt, options.filters.startDate));
-  }
-  if (options.filters?.endDate) {
-    conditions.push(lte(auditLogs.createdAt, options.filters.endDate));
-  }
-  if (options.filters?.action) {
-    conditions.push(eq(auditLogs.action, options.filters.action));
-  }
-  if (options.filters?.userId) {
-    conditions.push(eq(auditLogs.userId, options.filters.userId));
-  }
-  if (options.cursor) {
-    const cursorCondition = or(
-      lt(auditLogs.createdAt, options.cursor.createdAt),
-      and(
-        eq(auditLogs.createdAt, options.cursor.createdAt),
-        lt(auditLogs.id, options.cursor.id)
-      )
-    );
-    if (cursorCondition) {
-      conditions.push(cursorCondition);
-    }
-  }
-
-  return db.select().from(auditLogs)
-    .where(and(...conditions))
-    .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-    .limit(options.limit ?? 100);
 }
 
 // ============================================

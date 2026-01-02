@@ -24,7 +24,6 @@ vi.mock("./db", () => ({
     ticketNumber: 101,
     accessToken: "test-token-123",
   }),
-  createAuditLog: vi.fn().mockResolvedValue(undefined),
   getPartiesByStoreId: vi.fn().mockResolvedValue([
     {
       id: 1,
