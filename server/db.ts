@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, gte, lte, lt, or } from "drizzle-orm";
+import { eq, and, desc, gte, lte, lt, sql, or, SQL, asc, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 

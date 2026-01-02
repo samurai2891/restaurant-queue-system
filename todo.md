@@ -105,3 +105,6 @@
 
 ## バグ修正
 - [x] analytics.waitTimeByHourプロシージャが見つからないエラーを修正
+
+## バグ修正（2026-01-02）
+- [x] ダッシュボードページで発生している「Unexpected token '<', "<!doctype "... is not valid JSON」エラーを修正（lt関数のインポート漏れを修正）
