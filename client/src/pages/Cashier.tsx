@@ -50,6 +50,7 @@ export default function Cashier() {
   const [notes, setNotes] = useState("");
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash");
   const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
+  const [cashReceived, setCashReceived] = useState("");
   const hasInitializedSelection = useRef(false);
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
@@ -114,6 +115,10 @@ export default function Cashier() {
     [selectedOrders]
   );
 
+  const isCashPayment = selectedPaymentMethod === "cash";
+  const cashReceivedNumber = cashReceived ? Number(cashReceived) : 0;
+  const changeAmount = cashReceivedNumber - selectedOrderTotal;
+
   useEffect(() => {
     const unpaidOrderIds = unpaidOrders.map((order) => order.id);
     setSelectedOrderIds((current) => {
@@ -135,7 +140,15 @@ export default function Cashier() {
   const canSubmit = cart.length > 0 && (
     partyMode === "existing" ? Boolean(selectedPartyId) : partySizeNumber > 0
   );
-  const canConfirmPayment = selectedOrderIds.length > 0 && selectedPaymentMethod.length > 0;
+  const canConfirmPayment = selectedOrderIds.length > 0
+    && selectedPaymentMethod.length > 0
+    && (!isCashPayment || cashReceivedNumber >= selectedOrderTotal);
+
+  useEffect(() => {
+    if (!isCashPayment) {
+      setCashReceived("");
+    }
+  }, [isCashPayment]);
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
@@ -465,6 +478,30 @@ export default function Cashier() {
                   </label>
                 </RadioGroup>
               </div>
+
+              {isCashPayment && (
+                <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="cashier-cash-received">受取金額</Label>
+                    <Input
+                      id="cashier-cash-received"
+                      type="number"
+                      min={0}
+                      value={cashReceived}
+                      onChange={(event) => setCashReceived(event.target.value)}
+                      placeholder="例: 5000"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">お釣り</span>
+                    <span className={`font-semibold ${changeAmount < 0 ? "text-destructive" : "text-foreground"}`}>
+                      {changeAmount >= 0
+                        ? `¥${changeAmount.toLocaleString()}`
+                        : `不足 ¥${Math.abs(changeAmount).toLocaleString()}`}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <Button
                 className="w-full"

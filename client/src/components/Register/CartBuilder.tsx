@@ -1,12 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { CartItem, MenuItem } from "@/hooks/useMenuCart";
-import { Minus, Plus, Trash2, UtensilsCrossed } from "lucide-react";
+import { Minus, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
 type Category = {
@@ -141,20 +142,58 @@ export const CartBuilder = ({
   sidebarFooter,
 }: CartBuilderProps) => {
   const [activeCategory, setActiveCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const filteredItems = useMemo(() => {
     if (!items) return [];
-    if (activeCategory === "all") return items;
-    return items.filter((item) => item.categoryId === parseInt(activeCategory, 10));
-  }, [activeCategory, items]);
+    let results = items;
+    if (activeCategory !== "all") {
+      results = results.filter((item) => item.categoryId === parseInt(activeCategory, 10));
+    }
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      results = results.filter((item) => item.name.toLowerCase().includes(query));
+    }
+    return results;
+  }, [activeCategory, items, searchQuery]);
 
   return (
-    <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[2fr_1fr]">
+    <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[220px_1fr_320px]">
       <div className="space-y-4">
-        <Card>
+        <Card className="lg:sticky lg:top-4">
           <CardHeader className="pb-2">
             <CardTitle>カテゴリ</CardTitle>
-            <CardDescription>メニューを絞り込みます</CardDescription>
+            <CardDescription>POSメニューの絞り込み</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="max-h-[60vh] pr-3">
+              <div className="space-y-2">
+                <Button
+                  variant={activeCategory === "all" ? "default" : "ghost"}
+                  className="w-full justify-start"
+                  onClick={() => setActiveCategory("all")}
+                >
+                  すべて
+                </Button>
+                {categories?.map((category) => (
+                  <Button
+                    key={category.id}
+                    variant={activeCategory === category.id.toString() ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => setActiveCategory(category.id.toString())}
+                  >
+                    {category.name}
+                  </Button>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:hidden">
+          <CardHeader className="pb-2">
+            <CardTitle>カテゴリ</CardTitle>
+            <CardDescription>タップして切り替え</CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="w-full">
@@ -180,10 +219,26 @@ export const CartBuilder = ({
             </ScrollArea>
           </CardContent>
         </Card>
+      </div>
 
-        <div className="grid gap-4">
+      <div className="space-y-4">
+        <Card className="border-muted/60 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3 rounded-xl border bg-background px-4 py-2 shadow-sm">
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="メニューを検索..."
+                className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredItems.length === 0 ? (
-            <Card>
+            <Card className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
               <CardContent className="py-12 text-center">
                 <UtensilsCrossed className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">メニューがありません</p>
@@ -199,12 +254,26 @@ export const CartBuilder = ({
                 <Card
                   key={item.id}
                   className={`overflow-hidden transition-all duration-200 ${
-                    isSoldOut ? "opacity-60" : "hover:shadow-lg"
+                    isSoldOut ? "opacity-60" : "hover:-translate-y-0.5 hover:shadow-lg"
                   } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
                 >
                   <CardContent className="p-4">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-2 flex-1">
+                    <div className="flex flex-col gap-3">
+                      <div className="h-32 w-full overflow-hidden rounded-lg bg-muted/40">
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+                            画像なし
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-bold text-base line-clamp-2">{item.name}</h3>
                           {inCart && (
@@ -230,13 +299,13 @@ export const CartBuilder = ({
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center justify-end gap-3 min-w-[180px]">
+                      <div className="flex items-center justify-between gap-3">
                         {inCart && !isSoldOut ? (
                           <div className="flex items-center gap-2">
                             <Button
                               variant="outline"
                               size="icon"
-                              className="w-12 h-12 rounded-full"
+                              className="w-10 h-10 rounded-full"
                               onClick={() => {
                                 if (cartItem?.quantity === 1) {
                                   onRemoveFromCart(item.id);
@@ -246,31 +315,31 @@ export const CartBuilder = ({
                               }}
                             >
                               {cartItem?.quantity === 1 ? (
-                                <Trash2 className="w-5 h-5 text-red-500" />
+                                <Trash2 className="w-4 h-4 text-red-500" />
                               ) : (
-                                <Minus className="w-5 h-5" />
+                                <Minus className="w-4 h-4" />
                               )}
                             </Button>
-                            <span className="w-10 text-center text-lg font-bold">
+                            <span className="w-8 text-center text-lg font-bold">
                               {cartItem?.quantity}
                             </span>
                             <Button
                               variant="outline"
                               size="icon"
-                              className="w-12 h-12 rounded-full"
+                              className="w-10 h-10 rounded-full"
                               onClick={() => onUpdateQuantity(item.id, 1)}
                             >
-                              <Plus className="w-5 h-5" />
+                              <Plus className="w-4 h-4" />
                             </Button>
                           </div>
                         ) : (
                           <Button
                             size="lg"
-                            className="h-12 min-h-[44px] px-6 rounded-xl"
+                            className="h-11 min-h-[44px] flex-1 rounded-xl"
                             onClick={() => onAddToCart(item)}
                             disabled={isSoldOut}
                           >
-                            <Plus className="w-5 h-5 mr-2" />
+                            <Plus className="w-4 h-4 mr-2" />
                             追加
                           </Button>
                         )}
