@@ -556,7 +556,9 @@ export async function getNextOrderNumber(storeId: number): Promise<number> {
   return (result[0]?.maxOrder || 0) + 1;
 }
 
-export async function createOrder(data: Omit<InsertOrder, 'orderNumber'>) {
+export async function createOrder(
+  data: Omit<InsertOrder, "orderNumber"> & { entrySource?: string | null; routeToKitchen?: boolean }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
@@ -616,7 +618,10 @@ export async function getOrdersByPartyId(partyId: number) {
     .orderBy(desc(orders.orderedAt));
 }
 
-export async function updateOrder(id: number, data: Partial<InsertOrder>) {
+export async function updateOrder(
+  id: number,
+  data: Partial<InsertOrder> & { entrySource?: string | null; routeToKitchen?: boolean }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(orders).set(data).where(eq(orders.id, id));

@@ -81,6 +81,8 @@ const createOrderWithItems = async ({
   items,
   notes,
   orderType,
+  entrySource,
+  routeToKitchen,
 }: {
   storeId: number;
   partyId: number;
@@ -92,6 +94,8 @@ const createOrderWithItems = async ({
   }>;
   notes?: string;
   orderType: "dine_in" | "preorder";
+  entrySource?: string;
+  routeToKitchen?: boolean;
 }) => {
   const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
 
@@ -101,6 +105,8 @@ const createOrderWithItems = async ({
     totalAmount: String(totalAmount),
     notes,
     orderType,
+    entrySource,
+    routeToKitchen: routeToKitchen ?? true,
   });
 
   for (const itemData of orderItemsData) {
@@ -120,6 +126,8 @@ const createStaffOrder = async ({
   partyId,
   items,
   notes,
+  entrySource,
+  routeToKitchen,
 }: {
   userId: number;
   storeId: number;
@@ -131,6 +139,8 @@ const createStaffOrder = async ({
     notes?: string;
   }>;
   notes?: string;
+  entrySource?: string;
+  routeToKitchen?: boolean;
 }) => {
   await checkStoreAccess(userId, storeId);
 
@@ -149,6 +159,8 @@ const createStaffOrder = async ({
     items,
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
+    entrySource: entrySource ?? "staff",
+    routeToKitchen,
   });
 
   return {
@@ -906,10 +918,11 @@ const orderRouter = router({
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       const orders = await db.getOrdersByStoreId(input.storeId);
+      const kitchenOrders = orders.filter(order => order.routeToKitchen === true);
       
       // 注文明細を付加
       const ordersWithItems = await Promise.all(
-        orders.map(async (order) => {
+        kitchenOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
           const party = await db.getPartyById(order.partyId);
           return { ...order, items, party };
@@ -930,6 +943,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
       const party = await db.getPartyByAccessToken(input.accessToken);
@@ -956,6 +971,8 @@ const orderRouter = router({
         items: input.items,
         notes: input.notes,
         orderType: party.status === "seated" ? "dine_in" : "preorder",
+        entrySource: input.entrySource ?? "guest",
+        routeToKitchen: input.routeToKitchen,
       });
       
       return {
@@ -977,6 +994,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
       userId: ctx.user.id,
@@ -984,6 +1003,8 @@ const orderRouter = router({
       partyId: input.partyId,
       items: input.items,
       notes: input.notes,
+      entrySource: input.entrySource,
+      routeToKitchen: input.routeToKitchen,
     })),
 
   // スタッフ用: 注文作成（保護API）
@@ -998,6 +1019,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
       userId: ctx.user.id,
@@ -1005,6 +1028,8 @@ const orderRouter = router({
       partyId: input.partyId,
       items: input.items,
       notes: input.notes,
+      entrySource: input.entrySource,
+      routeToKitchen: input.routeToKitchen,
     })),
 
   // 注文ステータス更新
