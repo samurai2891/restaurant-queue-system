@@ -5,8 +5,10 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import * as db from "./db";
+import type { InsertOrder } from "../drizzle/schema";
 import { nanoid } from "nanoid";
-import { createCheckoutSession, createPortalSession, stripe } from "./stripe/stripe";
+import { stripe } from "./_core/stripe";
+import { createCheckoutSession, createPortalSession } from "./stripe/stripe";
 import { SUBSCRIPTION_PLANS, getPlanByPriceId } from "./stripe/products";
 import { sendNotificationWithRetry } from "./_core/guestNotification";
 
@@ -75,12 +77,17 @@ const buildOrderItemsData = async (
   return { totalAmount, orderItemsData };
 };
 
+type OrderOverrides = Partial<
+  Pick<InsertOrder, "entrySource" | "routeToKitchen" | "paymentProvider" | "paymentReference">
+>;
+
 const createOrderWithItems = async ({
   storeId,
   partyId,
   items,
   notes,
   orderType,
+  orderOverrides,
 }: {
   storeId: number;
   partyId: number;
@@ -92,6 +99,7 @@ const createOrderWithItems = async ({
   }>;
   notes?: string;
   orderType: "dine_in" | "preorder";
+  orderOverrides?: OrderOverrides;
 }) => {
   const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
 
@@ -101,6 +109,7 @@ const createOrderWithItems = async ({
     totalAmount: String(totalAmount),
     notes,
     orderType,
+    ...orderOverrides,
   });
 
   for (const itemData of orderItemsData) {
@@ -120,6 +129,7 @@ const createStaffOrder = async ({
   partyId,
   items,
   notes,
+  orderOverrides,
 }: {
   userId: number;
   storeId: number;
@@ -131,6 +141,7 @@ const createStaffOrder = async ({
     notes?: string;
   }>;
   notes?: string;
+  orderOverrides?: OrderOverrides;
 }) => {
   await checkStoreAccess(userId, storeId);
 
@@ -149,6 +160,7 @@ const createStaffOrder = async ({
     items,
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
+    orderOverrides,
   });
 
   return {
@@ -1160,6 +1172,156 @@ const orderRouter = router({
 });
 
 // ============================================
+// POS Router
+// ============================================
+const posRouter = router({
+  createOrderForCheckout: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createStaffOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+      orderOverrides: {
+        entrySource: "staff_register",
+        routeToKitchen: false,
+      },
+    })),
+
+  createQrCheckoutSession: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      orderId: z.number(),
+      successUrl: z.string().url(),
+      cancelUrl: z.string().url(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.orderId);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (order.paymentStatus === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "すでに支払い済みです" });
+      }
+      if (order.paymentStatus === "voided") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払い取り消し済みの注文です" });
+      }
+
+      const store = await db.getStoreById(input.storeId);
+      if (!store) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "店舗が見つかりません" });
+      }
+
+      const amountTotal = Number(order.totalAmount ?? 0);
+      if (!Number.isFinite(amountTotal) || amountTotal <= 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払金額が無効です" });
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "jpy",
+              unit_amount: Math.round(amountTotal),
+              product_data: {
+                name: `${store.name} 注文 #${order.orderNumber}`,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        client_reference_id: `order_${order.id}`,
+        metadata: {
+          order_id: order.id.toString(),
+          store_id: store.id.toString(),
+        },
+        success_url: input.successUrl,
+        cancel_url: input.cancelUrl,
+      });
+
+      await db.updateOrder(order.id, {
+        paymentProvider: "stripe_checkout",
+        paymentReference: session.id,
+      });
+
+      return {
+        id: session.id,
+        url: session.url,
+        expiresAt: session.expires_at,
+      };
+    }),
+
+  getQrPaymentStatus: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      orderId: z.number(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.orderId);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (!order.paymentReference) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "決済セッションが未作成です" });
+      }
+
+      const session = await stripe.checkout.sessions.retrieve(order.paymentReference);
+
+      return {
+        id: session.id,
+        status: session.status,
+        paymentStatus: session.payment_status,
+        amountTotal: session.amount_total,
+        currency: session.currency,
+      };
+    }),
+
+  confirmPaymentManual: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      orderId: z.number(),
+      paymentMethod: z.string().min(1).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.orderId);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (order.paymentStatus === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "すでに支払い済みです" });
+      }
+      if (order.paymentStatus === "voided") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払い取り消し済みの注文です" });
+      }
+
+      await db.confirmOrderPayment(order.id, {
+        paymentMethod: input.paymentMethod ?? "manual",
+      });
+
+      return { success: true };
+    }),
+});
+
+// ============================================
 // Analytics Router
 // ============================================
 const analyticsRouter = router({
@@ -1642,6 +1804,7 @@ export const appRouter = router({
   notification: notificationRouter,
   menu: { ...menuRouter, guestCategories: menuRouter.categories, guestItems: menuRouter.items },
   order: { ...orderRouter, guestCreate: orderRouter.create, kitchen: orderRouter.list },
+  pos: posRouter,
   analytics: analyticsRouter,
   dataExport: dataExportRouter,
   publicStore: publicStoreRouter,

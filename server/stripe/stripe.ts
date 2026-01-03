@@ -1,11 +1,4 @@
-import Stripe from "stripe";
-import { ENV } from "../_core/env";
-
-// Stripe クライアント初期化
-export const stripe = new Stripe(ENV.stripeSecretKey || "", {
-  // @ts-expect-error - Stripe API version
-  apiVersion: "2025-04-30.basil",
-});
+import { stripe } from "../_core/stripe";
 
 // チェックアウトセッション作成
 export async function createCheckoutSession({
