@@ -105,6 +105,7 @@ export const parties = mysqlTable("parties", {
   storeId: int("storeId").notNull(),
   // 受付番号（店舗ごとに日次リセット）
   ticketNumber: int("ticketNumber").notNull(),
+  tableLabel: varchar("tableLabel", { length: 50 }),
   // ゲスト情報
   guestName: varchar("guestName", { length: 100 }),
   partySize: int("partySize").notNull(),

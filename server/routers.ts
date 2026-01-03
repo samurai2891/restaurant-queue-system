@@ -392,6 +392,7 @@ const partyRouter = router({
   create: protectedProcedure
     .input(z.object({
       storeId: z.number(),
+      tableLabel: z.string().max(50).optional(),
       guestName: z.string().optional(),
       partySize: z.number().min(1),
       childCount: z.number().optional(),
@@ -443,6 +444,48 @@ const partyRouter = router({
         estimatedWaitMinutes,
       });
       return result;
+    }),
+
+  // スタッフ用: 受付情報更新
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      tableLabel: z.string().max(50).optional(),
+      guestName: z.string().optional(),
+      partySize: z.number().min(1).optional(),
+      childCount: z.number().optional(),
+      hasStroller: z.boolean().optional(),
+      phone: z.string().optional(),
+      email: z.string().email().optional(),
+      preferredSeatTypeId: z.number().optional(),
+      notes: z.string().optional(),
+      allergies: z.string().optional(),
+      priority: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, storeId, ...data } = input;
+      await checkStoreAccess(ctx.user.id, storeId);
+
+      const party = await db.getPartyById(id);
+      if (!party || party.storeId !== storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+
+      const seatTypeId = input.preferredSeatTypeId ?? party.preferredSeatTypeId;
+      const partySize = input.partySize ?? party.partySize;
+      if (seatTypeId) {
+        const seatType = await db.getSeatTypeById(seatTypeId);
+        if (!seatType || seatType.storeId !== storeId) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "指定された席種が利用できません" });
+        }
+        if (partySize < seatType.minPartySize || partySize > seatType.maxPartySize) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "席種の人数条件に一致しません" });
+        }
+      }
+
+      await db.updateParty(id, data);
+      return { success: true };
     }),
 
   // ゲスト用: 自己受付（公開API）

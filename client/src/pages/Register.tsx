@@ -2,17 +2,21 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, CheckCircle2, CreditCard, Loader2, Receipt, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 
 export default function Register() {
   const { storeId } = useParams<{ storeId: string }>();
   const storeIdNum = parseInt(storeId || "0", 10);
   const { loading: authLoading, isAuthenticated } = useAuth();
+  const [tableLabelQuery, setTableLabelQuery] = useState("");
+  const [ticketNumberQuery, setTicketNumberQuery] = useState("");
   const checkoutOrders = [
     {
       id: "ORD-102",
@@ -44,6 +48,28 @@ export default function Register() {
     { id: storeIdNum },
     { enabled: isAuthenticated && storeIdNum > 0 }
   );
+  const { data: parties, isLoading: partiesLoading } = trpc.party.list.useQuery(
+    { storeId: storeIdNum },
+    { enabled: isAuthenticated && storeIdNum > 0, refetchInterval: 5000 }
+  );
+
+  const filteredParties = useMemo(() => {
+    const tableLabelValue = tableLabelQuery.trim().toLowerCase();
+    const ticketValue = ticketNumberQuery.trim();
+    if (!tableLabelValue && !ticketValue) {
+      return parties ?? [];
+    }
+
+    return (parties ?? []).filter((party) => {
+      const matchesTableLabel = tableLabelValue
+        ? (party.tableLabel ?? "").toLowerCase().includes(tableLabelValue)
+        : true;
+      const matchesTicket = ticketValue
+        ? String(party.ticketNumber ?? "").includes(ticketValue)
+        : true;
+      return matchesTableLabel && matchesTicket;
+    });
+  }, [parties, tableLabelQuery, ticketNumberQuery]);
 
   if (authLoading || storeLoading) {
     return (
@@ -66,6 +92,66 @@ export default function Register() {
           <p className="text-sm text-muted-foreground">{store?.name ?? "店舗"}</p>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>受付検索</CardTitle>
+          <CardDescription>
+            テーブルラベルや受付番号で対象の受付を絞り込みます。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="tableLabelSearch">テーブルラベル</Label>
+              <Input
+                id="tableLabelSearch"
+                placeholder="例: テーブル3"
+                value={tableLabelQuery}
+                onChange={(event) => setTableLabelQuery(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ticketNumberSearch">受付番号</Label>
+              <Input
+                id="ticketNumberSearch"
+                placeholder="例: 12"
+                inputMode="numeric"
+                value={ticketNumberQuery}
+                onChange={(event) => setTicketNumberQuery(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2 text-sm">
+            {partiesLoading ? (
+              <div className="text-muted-foreground">受付情報を読み込み中...</div>
+            ) : filteredParties.length === 0 ? (
+              <div className="text-muted-foreground">該当する受付がありません。</div>
+            ) : (
+              filteredParties.map((party) => (
+                <div
+                  key={party.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">受付番号 {party.ticketNumber}</span>
+                      {party.tableLabel ? (
+                        <Badge variant="outline">{party.tableLabel}</Badge>
+                      ) : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {party.guestName ?? "お客様"} · {party.partySize}名
+                    </div>
+                  </div>
+                  <Badge variant="secondary">{party.status}</Badge>
+                </div>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
