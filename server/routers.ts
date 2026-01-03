@@ -9,6 +9,7 @@ import { nanoid } from "nanoid";
 import { createCheckoutSession, createPortalSession, stripe } from "./stripe/stripe";
 import { SUBSCRIPTION_PLANS, getPlanByPriceId } from "./stripe/products";
 import { sendNotificationWithRetry } from "./_core/guestNotification";
+import { buildNotificationMessage, resolveNotificationRecipient } from "./_core/notificationHelpers";
 
 // ============================================
 // Helper: Check store access
@@ -81,6 +82,7 @@ const createOrderWithItems = async ({
   items,
   notes,
   orderType,
+  status,
   entrySource,
   routeToKitchen,
 }: {
@@ -94,19 +96,26 @@ const createOrderWithItems = async ({
   }>;
   notes?: string;
   orderType: "dine_in" | "preorder";
+  status?: "pending" | "confirmed" | "preparing" | "ready" | "served" | "canceled";
   entrySource?: string;
   routeToKitchen?: boolean;
 }) => {
   const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
+  const now = new Date();
+  const orderStatus = status ?? "pending";
 
   const orderResult = await db.createOrder({
     storeId,
     partyId,
+    status: orderStatus,
+    routeToKitchen: routeToKitchen ?? true,
     totalAmount: String(totalAmount),
     notes,
     orderType,
     entrySource,
-    routeToKitchen: routeToKitchen ?? true,
+    confirmedAt: orderStatus === "confirmed" ? now : undefined,
+    preparedAt: orderStatus === "ready" ? now : undefined,
+    servedAt: orderStatus === "served" ? now : undefined,
   });
 
   const orderItemIds: number[] = [];
@@ -129,6 +138,7 @@ const createStaffOrder = async ({
   partyId,
   items,
   notes,
+  status,
   entrySource,
   routeToKitchen,
 }: {
@@ -142,6 +152,7 @@ const createStaffOrder = async ({
     notes?: string;
   }>;
   notes?: string;
+  status?: "pending" | "confirmed" | "preparing" | "ready" | "served" | "canceled";
   entrySource?: string;
   routeToKitchen?: boolean;
 }) => {
@@ -162,6 +173,7 @@ const createStaffOrder = async ({
     items,
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
+    status,
     entrySource: entrySource ?? "staff",
     routeToKitchen,
   });
@@ -208,6 +220,7 @@ const createCheckoutOrder = async ({
     items,
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
+    routeToKitchen: false,
   });
 
   const now = new Date();
@@ -311,6 +324,8 @@ const storeRouter = router({
       maxQueueSize: z.number().optional(),
       orderReleaseRank: z.number().optional(),
       orderReleaseMinutes: z.number().optional(),
+      autoNotifyRank: z.number().optional(),
+      autoNotifyMinutes: z.number().optional(),
       lineChannelAccessToken: z.string().optional(),
       lineChannelSecret: z.string().optional(),
       smsEnabled: z.boolean().optional(),
@@ -749,41 +764,21 @@ const notificationRouter = router({
       }
       
       // 送信先を決定
-      let recipient = "";
-      if (input.channel === "sms" && party.phone) {
-        recipient = party.phone;
-      } else if (input.channel === "email" && party.email) {
-        recipient = party.email;
-      } else if (input.channel === "line" && party.lineUserId) {
-        recipient = party.lineUserId;
-      } else {
+      const recipient = resolveNotificationRecipient(party, input.channel);
+      if (!recipient) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "送信先が設定されていません" });
       }
       
       // テンプレートからメッセージを生成
-      let message = input.message;
       const store = await db.getStoreById(input.storeId);
-      if (!message) {
-        const template = await db.getDefaultTemplate(input.storeId, input.type, input.channel);
-        if (template) {
-          message = template.template
-            .replace(/\{\{ticketNumber\}\}/g, String(party.ticketNumber))
-            .replace(/\{\{guestName\}\}/g, party.guestName || "お客様")
-            .replace(/\{\{partySize\}\}/g, String(party.partySize))
-            .replace(/\{\{storeName\}\}/g, store?.name || "")
-            .replace(/\{\{waitTime\}\}/g, String(party.estimatedWaitMinutes || 0));
-        } else {
-          // デフォルトメッセージ
-          const messages: Record<string, string> = {
-            registration: `受付番号${party.ticketNumber}番でお受けしました。`,
-            notify: `${party.ticketNumber}番のお客様、お席の準備ができました。`,
-            remind: `${party.ticketNumber}番のお客様、まもなくお呼び出しです。`,
-            seated: `ご来店ありがとうございました。`,
-            custom: "",
-          };
-          message = messages[input.type];
-        }
-      }
+      const message = await buildNotificationMessage({
+        storeId: input.storeId,
+        store: store ?? undefined,
+        party,
+        type: input.type,
+        channel: input.channel,
+        messageOverride: input.message,
+      });
       
       // 通知レコード作成
       const notificationId = await db.createNotification({
@@ -1055,6 +1050,7 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      status: z.enum(["pending", "confirmed", "preparing", "ready", "served", "canceled"]).optional(),
       entrySource: z.string().max(32).optional(),
       routeToKitchen: z.boolean().optional(),
     }))
@@ -1064,6 +1060,7 @@ const orderRouter = router({
       partyId: input.partyId,
       items: input.items,
       notes: input.notes,
+      status: input.status,
       entrySource: input.entrySource,
       routeToKitchen: input.routeToKitchen,
     })),
@@ -1101,6 +1098,7 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      status: z.enum(["pending", "confirmed", "preparing", "ready", "served", "canceled"]).optional(),
       entrySource: z.string().max(32).optional(),
       routeToKitchen: z.boolean().optional(),
     }))
@@ -1110,6 +1108,7 @@ const orderRouter = router({
       partyId: input.partyId,
       items: input.items,
       notes: input.notes,
+      status: input.status,
       entrySource: input.entrySource,
       routeToKitchen: input.routeToKitchen,
     })),
@@ -1249,8 +1248,9 @@ const orderRouter = router({
       }
       
       const orders = await db.getOrdersByPartyId(party.id);
+      const routedOrders = orders.filter(order => order.routeToKitchen !== false);
       const ordersWithItems = await Promise.all(
-        orders.map(async (order) => {
+        routedOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
           const itemsWithMenu = await Promise.all(
             items.map(async (item) => {

@@ -1,4 +1,4 @@
-import { eq, and, desc, gte, lte, lt, sql, or, SQL, asc, isNull, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, lte, lt, or, gt, SQL, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -6,7 +6,7 @@ import {
   storeStaff, InsertStoreStaff, StoreStaff,
   seatTypes, InsertSeatType, SeatType,
   parties, InsertParty, Party,
-  notifications, InsertNotification,
+  notifications, InsertNotification, Notification,
   notificationTemplates, InsertNotificationTemplate,
   menuCategories, InsertMenuCategory,
   menuItems, InsertMenuItem,
@@ -134,6 +134,13 @@ export async function getStoresByOwnerId(ownerId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(stores).where(eq(stores.ownerId, ownerId));
+}
+
+export async function getStoresForAutoNotification() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(stores)
+    .where(or(gt(stores.autoNotifyRank, 0), gt(stores.autoNotifyMinutes, 0)));
 }
 
 export async function updateStore(id: number, data: Partial<InsertStore>) {
@@ -387,6 +394,16 @@ export async function getNotificationsByPartyId(partyId: number) {
   return db.select().from(notifications)
     .where(eq(notifications.partyId, partyId))
     .orderBy(desc(notifications.createdAt));
+}
+
+export async function getLatestNotificationByPartyAndType(partyId: number, type: Notification["type"]) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(notifications)
+    .where(and(eq(notifications.partyId, partyId), eq(notifications.type, type)))
+    .orderBy(desc(notifications.createdAt))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
 }
 
 export async function getNotificationsForExport(

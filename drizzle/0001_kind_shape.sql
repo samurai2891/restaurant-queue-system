@@ -231,6 +231,8 @@ CREATE TABLE `stores` (
 	`smsEnabled` boolean DEFAULT true,
 	`orderReleaseRank` int DEFAULT 5,
 	`orderReleaseMinutes` int DEFAULT 15,
+	`autoNotifyRank` int DEFAULT 0,
+	`autoNotifyMinutes` int DEFAULT 0,
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `stores_id` PRIMARY KEY(`id`)

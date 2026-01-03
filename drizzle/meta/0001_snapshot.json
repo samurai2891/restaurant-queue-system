@@ -1585,6 +1585,22 @@
           "autoincrement": false,
           "default": 15
         },
+        "autoNotifyRank": {
+          "name": "autoNotifyRank",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
+        },
+        "autoNotifyMinutes": {
+          "name": "autoNotifyMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp",
