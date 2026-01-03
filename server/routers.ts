@@ -103,15 +103,18 @@ const createOrderWithItems = async ({
     orderType,
   });
 
+  const orderItemIds: number[] = [];
+
   for (const itemData of orderItemsData) {
-    await db.createOrderItem({
+    const orderItemId = await db.createOrderItem({
       orderId: orderResult.id,
       ...itemData,
     });
+    orderItemIds.push(orderItemId);
     await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
   }
 
-  return { orderResult, totalAmount };
+  return { orderResult, totalAmount, orderItemIds };
 };
 
 const createStaffOrder = async ({
@@ -150,6 +153,64 @@ const createStaffOrder = async ({
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
   });
+
+  return {
+    orderId: orderResult.id,
+    orderNumber: orderResult.orderNumber,
+    totalAmount,
+  };
+};
+
+const createCheckoutOrder = async ({
+  userId,
+  storeId,
+  partyId,
+  items,
+  notes,
+}: {
+  userId: number;
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+}) => {
+  await checkStoreAccess(userId, storeId);
+
+  const party = await db.getPartyById(partyId);
+  if (!party || party.storeId !== storeId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+  }
+
+  if (party.status === "canceled" || party.status === "noshow") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+  }
+
+  const { orderResult, totalAmount, orderItemIds } = await createOrderWithItems({
+    storeId: party.storeId,
+    partyId: party.id,
+    items,
+    notes,
+    orderType: party.status === "seated" ? "dine_in" : "preorder",
+  });
+
+  const now = new Date();
+  await db.updateOrder(orderResult.id, {
+    status: "served",
+    confirmedAt: now,
+    preparedAt: now,
+    servedAt: now,
+  });
+
+  for (const orderItemId of orderItemIds) {
+    await db.updateOrderItem(orderItemId, {
+      status: "served",
+    });
+  }
 
   return {
     orderId: orderResult.id,
@@ -979,6 +1040,27 @@ const orderRouter = router({
       notes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+    })),
+
+  // 会計時入力専用: 注文作成（厨房へ出さない）
+  createForCheckout: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createCheckoutOrder({
       userId: ctx.user.id,
       storeId: input.storeId,
       partyId: input.partyId,
