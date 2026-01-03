@@ -106,3 +106,16 @@
 ## バグ修正（2026-01-02）
 - [x] ダッシュボードページで発生している「Unexpected token '<', "<!doctype "... is not valid JSON」エラーを修正（lt関数のインポート漏れを修正）
 - [x] GitHub同期時のマージコンフリクトを解決（dataExportRouter重複、routeToKitchen重複、autoNotifyRank/Minutes削除）
+
+## バグ調査（2026-01-02）
+- [x] 実装している全機能のUIを調査
+- [x] ダッシュボードページの確認 - 正常
+- [x] キュー管理ページの確認 - 正常
+- [x] メニュー管理ページの確認 - 正常
+- [x] 分析ページの確認 - Reactフックエラー
+- [x] 店舗設定ページの確認 - 正常
+
+## 発見された問題
+- [x] Analytics.tsxのReactフックエラーを修正（useMemoを条件分岐の前に移動）
+- [x] データダウンロード/データ出力ページのルーティングを確認（正常に動作）
+- [x] App.tsxのルーティング設定を確認（/export/:storeIdで正しく設定済み）

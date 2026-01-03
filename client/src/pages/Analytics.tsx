@@ -96,6 +96,56 @@ export default function Analytics() {
     setEndDate(range.end);
   };
 
+  const waitTimeByHour = useMemo(() => {
+    if (!waitTimeStats) {
+      return { data: [], seatTypeNames: [] as string[] };
+    }
+    const seatTypeNames = new Set<string>();
+    const grouped = new Map<number, Record<string, number | string>>();
+    waitTimeStats.forEach((stat) => {
+      const seatTypeName = stat.seatTypeName ?? "未指定";
+      seatTypeNames.add(seatTypeName);
+      const entry = grouped.get(stat.hour) ?? { hour: stat.hour, hourLabel: `${stat.hour}:00` };
+      entry[seatTypeName] = stat[waitTimeMetric];
+      grouped.set(stat.hour, entry);
+    });
+    const data = Array.from(grouped.values()).sort((a, b) => Number(a.hour) - Number(b.hour));
+    return {
+      data,
+      seatTypeNames: Array.from(seatTypeNames).sort((a, b) => a.localeCompare(b, "ja")),
+    };
+  }, [waitTimeStats, waitTimeMetric]);
+
+  const dailyData = useMemo(() => {
+    return periodAnalytics?.map((item) => ({
+      date: item.date,
+      seated: item.seatedCount ?? 0,
+      noshow: item.noshowCount ?? 0,
+    })) ?? [];
+  }, [periodAnalytics]);
+
+  const statusDistribution = useMemo(() => [
+    { name: '着席', value: 85 },
+    { name: 'キャンセル', value: 8 },
+    { name: 'No-show', value: 7 },
+  ], []);
+
+  const stats = useMemo(() => analytics ? {
+    totalParties: analytics.totalParties,
+    seatedRate: analytics.totalParties > 0 ? (analytics.seatedCount / analytics.totalParties * 100).toFixed(1) : 0,
+    avgWaitTime: analytics.avgWaitTime,
+    noshowRate: analytics.totalParties > 0 ? (analytics.noshowCount / analytics.totalParties * 100).toFixed(1) : 0,
+    notificationResponseRate: 87.2,
+    avgTurnoverTime: 45,
+  } : {
+    totalParties: 341,
+    seatedRate: 92.4,
+    avgWaitTime: 23,
+    noshowRate: 5.3,
+    notificationResponseRate: 87.2,
+    avgTurnoverTime: 45,
+  }, [analytics]);
+
   if (authLoading || storeLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -120,54 +170,6 @@ export default function Analytics() {
       </div>
     );
   }
-
-  const waitTimeByHour = useMemo(() => {
-    if (!waitTimeStats) {
-      return { data: [], seatTypeNames: [] as string[] };
-    }
-    const seatTypeNames = new Set<string>();
-    const grouped = new Map<number, Record<string, number | string>>();
-    waitTimeStats.forEach((stat) => {
-      const seatTypeName = stat.seatTypeName ?? "未指定";
-      seatTypeNames.add(seatTypeName);
-      const entry = grouped.get(stat.hour) ?? { hour: stat.hour, hourLabel: `${stat.hour}:00` };
-      entry[seatTypeName] = stat[waitTimeMetric];
-      grouped.set(stat.hour, entry);
-    });
-    const data = Array.from(grouped.values()).sort((a, b) => Number(a.hour) - Number(b.hour));
-    return {
-      data,
-      seatTypeNames: Array.from(seatTypeNames).sort((a, b) => a.localeCompare(b, "ja")),
-    };
-  }, [waitTimeStats, waitTimeMetric]);
-
-  const dailyData = periodAnalytics?.map((item) => ({
-    date: item.date,
-    seated: item.seatedCount ?? 0,
-    noshow: item.noshowCount ?? 0,
-  })) ?? [];
-
-  const statusDistribution = [
-    { name: '着席', value: 85 },
-    { name: 'キャンセル', value: 8 },
-    { name: 'No-show', value: 7 },
-  ];
-
-  const stats = analytics ? {
-    totalParties: analytics.totalParties,
-    seatedRate: analytics.totalParties > 0 ? (analytics.seatedCount / analytics.totalParties * 100).toFixed(1) : 0,
-    avgWaitTime: analytics.avgWaitTime,
-    noshowRate: analytics.totalParties > 0 ? (analytics.noshowCount / analytics.totalParties * 100).toFixed(1) : 0,
-    notificationResponseRate: 87.2,
-    avgTurnoverTime: 45,
-  } : {
-    totalParties: 341,
-    seatedRate: 92.4,
-    avgWaitTime: 23,
-    noshowRate: 5.3,
-    notificationResponseRate: 87.2,
-    avgTurnoverTime: 45,
-  };
 
   return (
     <div className="min-h-screen bg-background">
