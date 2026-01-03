@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleStripeWebhook } from "../stripe/webhook";
+import { startAutoNotificationScheduler } from "./autoNotificationScheduler";
 import { startDataRetentionScheduler } from "./dataRetention";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -67,6 +68,7 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
+  startAutoNotificationScheduler();
   startDataRetentionScheduler();
 }
 
