@@ -1,5 +1,4 @@
 import {
-  deleteAuditLogsBefore,
   deleteDailyAnalyticsBefore,
   deleteNotificationsBefore,
   deleteOrderItemsBeforeOrderDate,
@@ -45,13 +44,6 @@ const RETENTION_POLICIES: RetentionPolicy[] = [
     months: 18,
     basis: "orders.orderedAt",
     deleteBefore: deleteOrderItemsBeforeOrderDate,
-  },
-  {
-    label: "監査ログ",
-    table: "audit_logs",
-    days: 14,
-    basis: "createdAt",
-    deleteBefore: deleteAuditLogsBefore,
   },
   {
     label: "サブスクリプション履歴",

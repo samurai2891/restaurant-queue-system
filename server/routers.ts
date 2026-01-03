@@ -24,6 +24,213 @@ async function checkStoreAccess(userId: number, storeId: number, requiredRoles?:
   return staff;
 }
 
+const buildOrderItemsData = async (
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>
+) => {
+  let totalAmount = 0;
+  const orderItemsData = [];
+
+  for (const item of items) {
+    const menuItem = await db.getMenuItemById(item.menuItemId);
+    if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
+    }
+
+    if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
+    }
+
+    const unitPrice = Number(menuItem.price);
+    let modifierPrice = 0;
+
+    if (item.modifiers && Array.isArray(item.modifiers)) {
+      const modifiers = await db.getMenuModifiersByItemId(item.menuItemId);
+      for (const modId of item.modifiers) {
+        const mod = modifiers.find(m => m.id === modId);
+        if (mod) {
+          modifierPrice += Number(mod.price || 0);
+        }
+      }
+    }
+
+    const subtotal = (unitPrice + modifierPrice) * item.quantity;
+    totalAmount += subtotal;
+
+    orderItemsData.push({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      unitPrice: String(unitPrice),
+      modifiers: item.modifiers,
+      modifierPrice: String(modifierPrice),
+      subtotal: String(subtotal),
+      notes: item.notes,
+    });
+  }
+
+  return { totalAmount, orderItemsData };
+};
+
+const createOrderWithItems = async ({
+  storeId,
+  partyId,
+  items,
+  notes,
+  orderType,
+  entrySource,
+  routeToKitchen,
+}: {
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+  orderType: "dine_in" | "preorder";
+  entrySource?: string;
+  routeToKitchen?: boolean;
+}) => {
+  const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
+
+  const orderResult = await db.createOrder({
+    storeId,
+    partyId,
+    totalAmount: String(totalAmount),
+    notes,
+    orderType,
+    entrySource,
+    routeToKitchen: routeToKitchen ?? true,
+  });
+
+  const orderItemIds: number[] = [];
+
+  for (const itemData of orderItemsData) {
+    const orderItemId = await db.createOrderItem({
+      orderId: orderResult.id,
+      ...itemData,
+    });
+    orderItemIds.push(orderItemId);
+    await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
+  }
+
+  return { orderResult, totalAmount, orderItemIds };
+};
+
+const createStaffOrder = async ({
+  userId,
+  storeId,
+  partyId,
+  items,
+  notes,
+  entrySource,
+  routeToKitchen,
+}: {
+  userId: number;
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+  entrySource?: string;
+  routeToKitchen?: boolean;
+}) => {
+  await checkStoreAccess(userId, storeId);
+
+  const party = await db.getPartyById(partyId);
+  if (!party || party.storeId !== storeId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+  }
+
+  if (party.status === "canceled" || party.status === "noshow") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+  }
+
+  const { orderResult, totalAmount } = await createOrderWithItems({
+    storeId: party.storeId,
+    partyId: party.id,
+    items,
+    notes,
+    orderType: party.status === "seated" ? "dine_in" : "preorder",
+    entrySource: entrySource ?? "staff",
+    routeToKitchen,
+  });
+
+  return {
+    orderId: orderResult.id,
+    orderNumber: orderResult.orderNumber,
+    totalAmount,
+  };
+};
+
+const createCheckoutOrder = async ({
+  userId,
+  storeId,
+  partyId,
+  items,
+  notes,
+}: {
+  userId: number;
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+}) => {
+  await checkStoreAccess(userId, storeId);
+
+  const party = await db.getPartyById(partyId);
+  if (!party || party.storeId !== storeId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+  }
+
+  if (party.status === "canceled" || party.status === "noshow") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+  }
+
+  const { orderResult, totalAmount, orderItemIds } = await createOrderWithItems({
+    storeId: party.storeId,
+    partyId: party.id,
+    items,
+    notes,
+    orderType: party.status === "seated" ? "dine_in" : "preorder",
+  });
+
+  const now = new Date();
+  await db.updateOrder(orderResult.id, {
+    status: "served",
+    confirmedAt: now,
+    preparedAt: now,
+    servedAt: now,
+  });
+
+  for (const orderItemId of orderItemIds) {
+    await db.updateOrderItem(orderItemId, {
+      status: "served",
+    });
+  }
+
+  return {
+    orderId: orderResult.id,
+    orderNumber: orderResult.orderNumber,
+    totalAmount,
+  };
+};
+
 const isOrderReleaseAllowed = (
   store: Awaited<ReturnType<typeof db.getStoreById>>,
   position: number,
@@ -63,16 +270,6 @@ const storeRouter = router({
         storeId,
         userId: ctx.user.id,
         role: "owner",
-      });
-      
-      // 監査ログ
-      await db.createAuditLog({
-        storeId,
-        userId: ctx.user.id,
-        action: "store.create",
-        targetType: "store",
-        targetId: storeId,
-        details: { name: input.name },
       });
       
       return { id: storeId };
@@ -122,16 +319,6 @@ const storeRouter = router({
       const { id, ...data } = input;
       await checkStoreAccess(ctx.user.id, id, ["owner", "manager"]);
       await db.updateStore(id, data);
-      
-      await db.createAuditLog({
-        storeId: id,
-        userId: ctx.user.id,
-        action: "store.update",
-        targetType: "store",
-        targetId: id,
-        details: data,
-      });
-      
       return { success: true };
     }),
 
@@ -140,15 +327,6 @@ const storeRouter = router({
     .mutation(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.id, ["owner", "manager", "host"]);
       await db.updateStore(input.id, { isReceptionPaused: input.paused });
-      
-      await db.createAuditLog({
-        storeId: input.id,
-        userId: ctx.user.id,
-        action: input.paused ? "store.pause_reception" : "store.resume_reception",
-        targetType: "store",
-        targetId: input.id,
-      });
-      
       return { success: true };
     }),
 });
@@ -189,16 +367,6 @@ const staffRouter = router({
       }
       
       const id = await db.addStoreStaff(input);
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "staff.add",
-        targetType: "staff",
-        targetId: id,
-        details: { role: input.role },
-      });
-      
       return { id };
     }),
 
@@ -213,16 +381,6 @@ const staffRouter = router({
       const { id, storeId, ...data } = input;
       await checkStoreAccess(ctx.user.id, storeId, ["owner", "manager"]);
       await db.updateStoreStaff(id, data);
-      
-      await db.createAuditLog({
-        storeId,
-        userId: ctx.user.id,
-        action: "staff.update",
-        targetType: "staff",
-        targetId: id,
-        details: data,
-      });
-      
       return { success: true };
     }),
 });
@@ -256,16 +414,6 @@ const seatTypeRouter = router({
         ...input,
         availableSeats: input.totalSeats,
       });
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "seat_type.create",
-        targetType: "seat_type",
-        targetId: id,
-        details: { name: input.name },
-      });
-      
       return { id };
     }),
 
@@ -287,16 +435,6 @@ const seatTypeRouter = router({
       const { id, storeId, ...data } = input;
       await checkStoreAccess(ctx.user.id, storeId, ["owner", "manager"]);
       await db.updateSeatType(id, data);
-      
-      await db.createAuditLog({
-        storeId,
-        userId: ctx.user.id,
-        action: "seat_type.update",
-        targetType: "seat_type",
-        targetId: id,
-        details: data,
-      });
-      
       return { success: true };
     }),
 });
@@ -377,16 +515,6 @@ const partyRouter = router({
         ...input,
         estimatedWaitMinutes,
       });
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "party.create",
-        targetType: "party",
-        targetId: result.id,
-        details: { ticketNumber: result.ticketNumber, partySize: input.partySize },
-      });
-      
       return result;
     }),
 
@@ -514,15 +642,6 @@ const partyRouter = router({
       const previousStatus = party.status;
       await db.updatePartyStatus(party.id, "arrived");
 
-      await db.createAuditLog({
-        storeId: party.storeId,
-        userId: null,
-        action: "party.arrived",
-        targetType: "party",
-        targetId: party.id,
-        details: { previousStatus, newStatus: "arrived", via: "guest" },
-      });
-
       return { success: true };
     }),
 
@@ -547,15 +666,6 @@ const partyRouter = router({
 
       const previousStatus = party.status;
       await db.updatePartyStatus(party.id, "canceled");
-
-      await db.createAuditLog({
-        storeId: party.storeId,
-        userId: null,
-        action: "party.canceled",
-        targetType: "party",
-        targetId: party.id,
-        details: { previousStatus, newStatus: "canceled", via: "guest" },
-      });
 
       return { success: true };
     }),
@@ -593,16 +703,6 @@ const partyRouter = router({
       if ((input.status === "canceled" || input.status === "noshow") && party.assignedSeatTypeId && previousStatus === "seated") {
         await db.updateSeatAvailability(party.assignedSeatTypeId, 1);
       }
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: `party.${input.status}`,
-        targetType: "party",
-        targetId: input.id,
-        details: { previousStatus, newStatus: input.status },
-      });
-      
       return { success: true };
     }),
 
@@ -623,15 +723,6 @@ const partyRouter = router({
       if (party.assignedSeatTypeId) {
         await db.updateSeatAvailability(party.assignedSeatTypeId, 1);
       }
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "party.release",
-        targetType: "party",
-        targetId: input.id,
-      });
-      
       return { success: true };
     }),
 });
@@ -729,15 +820,6 @@ const notificationRouter = router({
           errorMessage: sendResult.errorMessage,
         });
       }
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: "notification.send",
-        targetType: "notification",
-        targetId: notificationId,
-        details: { type: input.type, channel: input.channel, status: sendResult.status },
-      });
 
       if (sendResult.status === "failed") {
         throw new TRPCError({
@@ -897,10 +979,11 @@ const orderRouter = router({
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       const orders = await db.getOrdersByStoreId(input.storeId);
+      const kitchenOrders = orders.filter(order => order.routeToKitchen === true);
       
       // 注文明細を付加
       const ordersWithItems = await Promise.all(
-        orders.map(async (order) => {
+        kitchenOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
           const party = await db.getPartyById(order.partyId);
           return { ...order, items, party };
@@ -921,6 +1004,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
       const party = await db.getPartyByAccessToken(input.accessToken);
@@ -940,66 +1025,16 @@ const orderRouter = router({
       if (!store || !isOrderReleaseAllowed(store, position, estimatedWaitMinutes)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
       }
-      
-      // 合計金額計算
-      let totalAmount = 0;
-      const orderItemsData = [];
-      
-      for (const item of input.items) {
-        const menuItem = await db.getMenuItemById(item.menuItemId);
-        if (!menuItem || !menuItem.isAvailable || (menuItem.stockCount !== null && menuItem.stockCount <= 0)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `商品が利用できません: ${item.menuItemId}` });
-        }
 
-        if (menuItem.stockCount !== null && menuItem.stockCount < item.quantity) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: `在庫が不足しています: ${menuItem.name}` });
-        }
-        
-        const unitPrice = Number(menuItem.price);
-        let modifierPrice = 0;
-        
-        // モディファイア価格計算
-        if (item.modifiers && Array.isArray(item.modifiers)) {
-          for (const modId of item.modifiers) {
-            const modifiers = await db.getMenuModifiersByItemId(item.menuItemId);
-            const mod = modifiers.find(m => m.id === modId);
-            if (mod) {
-              modifierPrice += Number(mod.price || 0);
-            }
-          }
-        }
-        
-        const subtotal = (unitPrice + modifierPrice) * item.quantity;
-        totalAmount += subtotal;
-        
-        orderItemsData.push({
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          unitPrice: String(unitPrice),
-          modifiers: item.modifiers,
-          modifierPrice: String(modifierPrice),
-          subtotal: String(subtotal),
-          notes: item.notes,
-        });
-      }
-      
-      // 注文作成
-      const orderResult = await db.createOrder({
+      const { orderResult, totalAmount } = await createOrderWithItems({
         storeId: party.storeId,
         partyId: party.id,
-        totalAmount: String(totalAmount),
+        items: input.items,
         notes: input.notes,
         orderType: party.status === "seated" ? "dine_in" : "preorder",
+        entrySource: input.entrySource ?? "guest",
+        routeToKitchen: input.routeToKitchen,
       });
-      
-      // 注文明細作成
-      for (const itemData of orderItemsData) {
-        await db.createOrderItem({
-          orderId: orderResult.id,
-          ...itemData,
-        });
-        await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
-      }
       
       return {
         orderId: orderResult.id,
@@ -1007,6 +1042,77 @@ const orderRouter = router({
         totalAmount,
       };
     }),
+
+  // スタッフ用: 注文作成
+  createByStaff: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createStaffOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+      entrySource: input.entrySource,
+      routeToKitchen: input.routeToKitchen,
+    })),
+
+  // 会計時入力専用: 注文作成（厨房へ出さない）
+  createForCheckout: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createCheckoutOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+    })),
+
+  // スタッフ用: 注文作成（保護API）
+  createProtected: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createStaffOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
+      entrySource: input.entrySource,
+      routeToKitchen: input.routeToKitchen,
+    })),
 
   // 注文ステータス更新
   updateStatus: protectedProcedure
@@ -1026,15 +1132,97 @@ const orderRouter = router({
       if (input.status === "served") updateData.servedAt = now;
       
       await db.updateOrder(input.id, updateData);
-      
-      await db.createAuditLog({
-        storeId: input.storeId,
-        userId: ctx.user.id,
-        action: `order.${input.status}`,
-        targetType: "order",
-        targetId: input.id,
+      return { success: true };
+    }),
+
+  // 会計確定
+  confirmPayment: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      paymentMethod: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.id);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (order.paymentStatus === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "すでに支払い済みです" });
+      }
+      if (order.paymentStatus === "voided") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払い取り消し済みの注文です" });
+      }
+
+      await db.confirmOrderPayment(order.id, {
+        paymentMethod: input.paymentMethod,
       });
-      
+
+      return { success: true };
+    }),
+
+  // 会計確定（複数注文対応）
+  confirmPaymentBatch: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      orderIds: z.array(z.number().min(1)).min(1),
+      paymentMethod: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const uniqueOrderIds = Array.from(new Set(input.orderIds));
+      const orders = await Promise.all(uniqueOrderIds.map((orderId) => db.getOrderById(orderId)));
+
+      if (orders.some((order) => !order)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+
+      for (const order of orders) {
+        if (!order || order.storeId !== input.storeId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+        }
+        if (order.paymentStatus === "paid") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "すでに支払い済みの注文が含まれています" });
+        }
+        if (order.paymentStatus === "voided") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "支払い取り消し済みの注文が含まれています" });
+        }
+      }
+
+      for (const order of orders) {
+        if (!order) continue;
+
+        await db.confirmOrderPayment(order.id, {
+          paymentMethod: input.paymentMethod,
+        });
+      }
+
+      return { success: true, orderIds: uniqueOrderIds };
+    }),
+
+  // 支払取り消し
+  cancelPayment: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const order = await db.getOrderById(input.id);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+      if (order.paymentStatus !== "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払い済みの注文のみ取り消せます" });
+      }
+
+      await db.cancelOrderPayment(order.id);
+
       return { success: true };
     }),
 
@@ -1245,88 +1433,228 @@ const subscriptionRouter = router({
 });
 
 // ============================================
-// Audit Log Router
+// Data Export Router
 // ============================================
-const auditRouter = router({
-  list: protectedProcedure
+const dataExportRouter = router({
+  parties: protectedProcedure
     .input(z.object({
       storeId: z.number(),
-      limit: z.number().min(1).max(200).optional(),
-      cursor: z.object({
-        id: z.number(),
-        createdAt: z.string(),
-      }).optional(),
+      limit: z.number().min(1).max(10000).optional(),
       startDate: z.string().optional(),
       endDate: z.string().optional(),
-      action: z.string().trim().min(1).optional(),
-      userId: z.number().optional(),
     }))
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const limit = input.limit ?? 50;
-      const cursor = input.cursor ? {
-        id: input.cursor.id,
-        createdAt: new Date(input.cursor.createdAt),
-      } : undefined;
-      const filters = {
+      const parties = await db.getPartiesForExport(input.storeId, {
+        limit: input.limit ?? 5000,
         startDate: parseDateInput(input.startDate, "start"),
         endDate: parseDateInput(input.endDate, "end"),
-        action: input.action,
-        userId: input.userId,
-      };
-      const logs = await db.getAuditLogsByStoreId(input.storeId, {
-        limit: limit + 1,
-        cursor,
-        filters,
       });
-      const items = logs.slice(0, limit);
-      const lastItem = items[items.length - 1];
-      return {
-        items,
-        nextCursor: logs.length > limit && lastItem
-          ? { id: lastItem.id, createdAt: lastItem.createdAt.toISOString() }
-          : undefined,
-      };
-    }),
-  export: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(5000).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-      action: z.string().trim().min(1).optional(),
-      userId: z.number().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const filters = {
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-        action: input.action,
-        userId: input.userId,
-      };
-      const logs = await db.getAuditLogsByStoreId(input.storeId, {
-        limit: input.limit ?? 1000,
-        filters,
-      });
-      const header = ["日時", "ユーザー", "アクション", "対象", "詳細"];
-      const rows = logs.map((log) => {
-        const target = log.targetType
-          ? `${log.targetType}${log.targetId ? `#${log.targetId}` : ""}`
-          : "";
-        const details = log.details ? JSON.stringify(log.details) : "";
-        return [
-          log.createdAt.toISOString(),
-          log.userId ? String(log.userId) : "system",
-          log.action,
-          target,
-          details,
-        ].map(escapeCsv).join(",");
-      });
-      const csv = [header.map(escapeCsv).join(","), ...rows].join("\n");
+      const header = [
+        "ID",
+        "受付番号",
+        "ステータス",
+        "ゲスト名",
+        "人数",
+        "子供人数",
+        "電話番号",
+        "メール",
+        "希望席種ID",
+        "割当席種ID",
+        "優先度",
+        "備考",
+        "アレルギー",
+        "受付日時",
+        "呼出日時",
+        "到着日時",
+        "着席日時",
+        "完了日時",
+        "作成日時",
+        "更新日時",
+      ];
+      const rows = parties.map((party) => [
+        party.id,
+        party.ticketNumber,
+        party.status,
+        party.guestName ?? "",
+        party.partySize,
+        party.childCount ?? "",
+        party.phone ?? "",
+        party.email ?? "",
+        party.preferredSeatTypeId ?? "",
+        party.assignedSeatTypeId ?? "",
+        party.priority ?? "",
+        party.notes ?? "",
+        party.allergies ?? "",
+        party.registeredAt?.toISOString() ?? "",
+        party.notifiedAt?.toISOString() ?? "",
+        party.arrivedAt?.toISOString() ?? "",
+        party.seatedAt?.toISOString() ?? "",
+        party.completedAt?.toISOString() ?? "",
+        party.createdAt?.toISOString() ?? "",
+        party.updatedAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
       const dateStamp = new Date().toISOString().slice(0, 10);
       return {
-        fileName: `audit-${input.storeId}-${dateStamp}.csv`,
+        fileName: `parties-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+  notifications: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const notifications = await db.getNotificationsForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "ID",
+        "受付ID",
+        "通知タイプ",
+        "チャネル",
+        "送信先",
+        "件名",
+        "本文",
+        "ステータス",
+        "エラー",
+        "外部ID",
+        "送信日時",
+        "配信完了日時",
+        "作成日時",
+      ];
+      const rows = notifications.map((notification) => [
+        notification.id,
+        notification.partyId,
+        notification.type,
+        notification.channel,
+        notification.recipient,
+        notification.subject ?? "",
+        notification.message,
+        notification.status,
+        notification.errorMessage ?? "",
+        notification.externalId ?? "",
+        notification.sentAt?.toISOString() ?? "",
+        notification.deliveredAt?.toISOString() ?? "",
+        notification.createdAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `notifications-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+  orders: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const orders = await db.getOrdersForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "ID",
+        "受付ID",
+        "注文番号",
+        "ステータス",
+        "注文区分",
+        "合計金額",
+        "メモ",
+        "注文日時",
+        "確定日時",
+        "調理完了日時",
+        "提供日時",
+        "作成日時",
+        "更新日時",
+      ];
+      const rows = orders.map((order) => [
+        order.id,
+        order.partyId,
+        order.orderNumber,
+        order.status,
+        order.orderType ?? "",
+        order.totalAmount ?? "",
+        order.notes ?? "",
+        order.orderedAt?.toISOString() ?? "",
+        order.confirmedAt?.toISOString() ?? "",
+        order.preparedAt?.toISOString() ?? "",
+        order.servedAt?.toISOString() ?? "",
+        order.createdAt?.toISOString() ?? "",
+        order.updatedAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `orders-${input.storeId}-${dateStamp}.csv`,
+        csv,
+      };
+    }),
+  orderItems: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      limit: z.number().min(1).max(10000).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const orderItems = await db.getOrderItemsForExport(input.storeId, {
+        limit: input.limit ?? 5000,
+        startDate: parseDateInput(input.startDate, "start"),
+        endDate: parseDateInput(input.endDate, "end"),
+      });
+      const header = [
+        "注文明細ID",
+        "注文ID",
+        "注文番号",
+        "受付ID",
+        "商品ID",
+        "数量",
+        "単価",
+        "モディファイア",
+        "モディファイア料金",
+        "小計",
+        "ステータス",
+        "メモ",
+        "注文日時",
+        "作成日時",
+        "更新日時",
+      ];
+      const rows = orderItems.map((row) => [
+        row.item.id,
+        row.order.id,
+        row.order.orderNumber,
+        row.order.partyId,
+        row.item.menuItemId,
+        row.item.quantity,
+        row.item.unitPrice ?? "",
+        row.item.modifiers ? JSON.stringify(row.item.modifiers) : "",
+        row.item.modifierPrice ?? "",
+        row.item.subtotal ?? "",
+        row.item.status,
+        row.item.notes ?? "",
+        row.order.orderedAt?.toISOString() ?? "",
+        row.item.createdAt?.toISOString() ?? "",
+        row.item.updatedAt?.toISOString() ?? "",
+      ].map(formatCsvValue).join(","));
+      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      return {
+        fileName: `order-items-${input.storeId}-${dateStamp}.csv`,
         csv,
       };
     }),
@@ -1660,6 +1988,11 @@ function escapeCsv(value: string) {
   return `"${value.replace(/"/g, "\"\"")}"`;
 }
 
+function formatCsvValue(value: unknown) {
+  if (value === null || value === undefined) return escapeCsv("");
+  return escapeCsv(String(value));
+}
+
 // ============================================
 // Public Store Info (ゲスト用)
 // ============================================
@@ -1725,7 +2058,6 @@ export const appRouter = router({
   menu: { ...menuRouter, guestCategories: menuRouter.categories, guestItems: menuRouter.items },
   order: { ...orderRouter, guestCreate: orderRouter.create, kitchen: orderRouter.list },
   analytics: analyticsRouter,
-  audit: auditRouter,
   dataExport: dataExportRouter,
   publicStore: publicStoreRouter,
   subscription: subscriptionRouter,

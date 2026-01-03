@@ -1,156 +1,235 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { Download, FileText } from "lucide-react";
-import { useMemo, useState } from "react";
-import { useParams } from "wouter";
+import {
+  ArrowLeft,
+  Download,
+  FileText,
+  Loader2,
+  Receipt,
+  Bell,
+  ClipboardList,
+} from "lucide-react";
+import { type ElementType, useMemo, useState } from "react";
+import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
-type ExportType =
-  | "parties"
-  | "notifications"
-  | "orders"
-  | "order_items"
-  | "audit_logs"
-  | "subscriptions"
-  | "daily_analytics";
+type ExportType = "parties" | "notifications" | "orders" | "orderItems";
 
-const exportLabels: Record<ExportType, string> = {
-  parties: "顧客受付（ゲスト情報/待ち行列）",
-  notifications: "通知履歴（SMS/LINE/Email）",
-  orders: "売上/注文ヘッダ",
-  order_items: "売上/注文明細",
-  audit_logs: "監査ログ",
-  subscriptions: "サブスクリプション履歴",
-  daily_analytics: "日次集計（分析）",
+type ExportConfig = {
+  key: ExportType;
+  title: string;
+  description: string;
+  icon: ElementType;
 };
 
-const exportDescriptions: Record<ExportType, string> = {
-  parties: "受付番号・連絡先・状態などの受付情報をCSVで出力します。",
-  notifications: "通知の送信履歴とステータスをCSVで出力します。",
-  orders: "注文の概要（合計金額や状態）をCSVで出力します。",
-  order_items: "注文明細と数量・単価をCSVで出力します。",
-  audit_logs: "操作履歴（監査ログ）をCSVで出力します。",
-  subscriptions: "サブスクリプションの履歴をCSVで出力します。",
-  daily_analytics: "日次集計データをCSVで出力します。",
-};
+const exportConfigs: ExportConfig[] = [
+  {
+    key: "parties",
+    title: "受付データ",
+    description: "受付・順番待ちの履歴をCSVで出力します。",
+    icon: ClipboardList,
+  },
+  {
+    key: "notifications",
+    title: "通知履歴",
+    description: "SMS/LINE/メール通知の履歴をCSVで出力します。",
+    icon: Bell,
+  },
+  {
+    key: "orders",
+    title: "注文データ",
+    description: "注文ヘッダの一覧をCSVで出力します。",
+    icon: Receipt,
+  },
+  {
+    key: "orderItems",
+    title: "注文明細",
+    description: "注文に紐づく明細をCSVで出力します。",
+    icon: FileText,
+  },
+];
 
 export default function DataExport() {
   const { storeId } = useParams<{ storeId: string }>();
-  const storeIdNum = parseInt(storeId || "0", 10);
-  const { user, loading: authLoading, isAuthenticated } = useAuth();
-  const utils = trpc.useUtils();
-  const [downloading, setDownloading] = useState<ExportType | null>(null);
+  const storeIdNum = parseInt(storeId || "0");
+  const { loading: authLoading, isAuthenticated } = useAuth();
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [loadingKey, setLoadingKey] = useState<ExportType | null>(null);
 
-  const { data: store } = trpc.store.get.useQuery(
+  const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
     { enabled: isAuthenticated && storeIdNum > 0 }
   );
 
-  const exportItems = useMemo<ExportType[]>(
-    () => [
-      "parties",
-      "notifications",
-      "orders",
-      "order_items",
-      "audit_logs",
-      "subscriptions",
-      "daily_analytics",
-    ],
-    []
-  );
+  const utils = trpc.useUtils();
 
-  const handleDownload = async (type: ExportType) => {
-    if (!storeIdNum) return;
-    setDownloading(type);
+  const dateRangeLabel = useMemo(() => {
+    if (!startDate && !endDate) return "期間指定なし";
+    if (startDate && endDate) return `${startDate} 〜 ${endDate}`;
+    if (startDate) return `${startDate} 〜`;
+    return `〜 ${endDate}`;
+  }, [startDate, endDate]);
+
+  const downloadCsv = (fileName: string, csv: string) => {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExport = async (type: ExportType) => {
+    if (loadingKey) return;
+    setLoadingKey(type);
     try {
-      const result = await utils.client.dataExport.export.query({
+      const baseParams = {
         storeId: storeIdNum,
-        type,
-      });
-      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.fileName;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success(`${exportLabels[type]} をダウンロードしました`);
-    } catch (error) {
-      console.error(error);
-      toast.error(`${exportLabels[type]} のダウンロードに失敗しました`);
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        limit: 5000,
+      };
+      if (type === "parties") {
+        const data = await utils.client.dataExport.parties.query(baseParams);
+        downloadCsv(data.fileName, data.csv);
+        toast.success("受付データCSVをダウンロードしました");
+        return;
+      }
+      if (type === "notifications") {
+        const data = await utils.client.dataExport.notifications.query(baseParams);
+        downloadCsv(data.fileName, data.csv);
+        toast.success("通知履歴CSVをダウンロードしました");
+        return;
+      }
+      if (type === "orders") {
+        const data = await utils.client.dataExport.orders.query(baseParams);
+        downloadCsv(data.fileName, data.csv);
+        toast.success("注文CSVをダウンロードしました");
+        return;
+      }
+      const data = await utils.client.dataExport.orderItems.query(baseParams);
+      downloadCsv(data.fileName, data.csv);
+      toast.success("注文明細CSVをダウンロードしました");
+    } catch (error: any) {
+      toast.error(`エラー: ${error.message}`);
     } finally {
-      setDownloading(null);
+      setLoadingKey(null);
     }
   };
 
-  if (authLoading) {
+  if (authLoading || storeLoading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
-        読み込み中...
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  if (!user) {
+  if (!isAuthenticated) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-6 p-6 max-w-md w-full">
-          <h1 className="text-xl font-semibold tracking-tight text-center">Sign in to continue</h1>
-          <p className="text-sm text-muted-foreground text-center max-w-sm">
-            データダウンロードには認証が必要です。ログインしてください。
-          </p>
-          <Button
-            onClick={() => {
-              window.location.href = getLoginUrl();
-            }}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
-          >
-            Sign in
-          </Button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>ログインが必要です</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <a href={getLoginUrl()} className="block">
+              <Button className="w-full">ログイン</Button>
+            </a>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">データダウンロード</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {store ? `${store.name} の各データをCSVで出力できます。` : "各データをCSVで出力できます。"}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <FileText className="h-4 w-4" />
-          CSV形式で出力
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {exportItems.map((type) => (
-          <Card key={type} className="flex h-full flex-col">
-            <CardHeader className="space-y-2">
-              <CardTitle className="text-base">{exportLabels[type]}</CardTitle>
-              <CardDescription>{exportDescriptions[type]}</CardDescription>
-            </CardHeader>
-            <CardContent className="mt-auto">
-              <Button
-                className="w-full"
-                onClick={() => handleDownload(type)}
-                disabled={downloading !== null}
-              >
-                <Download className="mr-2 h-4 w-4" />
-                {downloading === type ? "ダウンロード中..." : "CSVをダウンロード"}
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 glass border-b">
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="w-4 h-4" />
               </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </Link>
+            <div>
+              <h1 className="font-bold">{store?.name}</h1>
+              <p className="text-xs text-muted-foreground">データエクスポート</p>
+            </div>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {dateRangeLabel}
+          </div>
+        </div>
+      </header>
+
+      <main className="container py-6 space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>エクスポート期間</CardTitle>
+            <CardDescription>
+              期間を指定しない場合は全期間を対象に出力します。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="export-start">開始日</Label>
+              <Input
+                id="export-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="export-end">終了日</Label>
+              <Input
+                id="export-end"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {exportConfigs.map((config) => (
+            <Card key={config.key} className="card-hover">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <config.icon className="w-4 h-4" />
+                  {config.title}
+                </CardTitle>
+                <CardDescription>{config.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={() => handleExport(config.key)}
+                  disabled={loadingKey !== null}
+                  className="gap-2"
+                >
+                  {loadingKey === config.key ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                  CSVをダウンロード
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </main>
     </div>
   );
 }

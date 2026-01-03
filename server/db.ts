@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, gte, lte, lt, or } from "drizzle-orm";
+import { eq, and, desc, gte, lte, lt, sql, or, SQL, asc, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -13,7 +13,6 @@ import {
   menuModifiers, InsertMenuModifier,
   orders, InsertOrder,
   orderItems, InsertOrderItem,
-  auditLogs, InsertAuditLog,
   subscriptions, InsertSubscription,
   dailyAnalytics, InsertDailyAnalytics
 } from "../drizzle/schema";
@@ -294,6 +293,27 @@ export async function getPartiesByStoreId(storeId: number, status?: string[]) {
   return query;
 }
 
+export async function getPartiesForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(parties.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(parties.registeredAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(parties.registeredAt, options.endDate));
+  }
+
+  return db.select().from(parties)
+    .where(and(...conditions))
+    .orderBy(desc(parties.registeredAt))
+    .limit(options.limit ?? 5000);
+}
+
 export async function getActivePartyCount(storeId: number) {
   const parties = await getPartiesByStoreId(storeId);
   return parties.filter(p => ["waiting", "notified", "arrived"].includes(p.status)).length;
@@ -367,6 +387,27 @@ export async function getNotificationsByPartyId(partyId: number) {
   return db.select().from(notifications)
     .where(eq(notifications.partyId, partyId))
     .orderBy(desc(notifications.createdAt));
+}
+
+export async function getNotificationsForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(notifications.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(notifications.createdAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(notifications.createdAt, options.endDate));
+  }
+
+  return db.select().from(notifications)
+    .where(and(...conditions))
+    .orderBy(desc(notifications.createdAt))
+    .limit(options.limit ?? 5000);
 }
 
 export async function updateNotification(id: number, data: Partial<InsertNotification>) {
@@ -515,7 +556,9 @@ export async function getNextOrderNumber(storeId: number): Promise<number> {
   return (result[0]?.maxOrder || 0) + 1;
 }
 
-export async function createOrder(data: Omit<InsertOrder, 'orderNumber'>) {
+export async function createOrder(
+  data: Omit<InsertOrder, "orderNumber"> & { entrySource?: string | null; routeToKitchen?: boolean }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
@@ -546,6 +589,27 @@ export async function getOrdersByStoreId(storeId: number, status?: string[]) {
     .orderBy(desc(orders.orderedAt));
 }
 
+export async function getOrdersForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(orders.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(orders.orderedAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(orders.orderedAt, options.endDate));
+  }
+
+  return db.select().from(orders)
+    .where(and(...conditions))
+    .orderBy(desc(orders.orderedAt))
+    .limit(options.limit ?? 5000);
+}
+
 export async function getOrdersByPartyId(partyId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -554,10 +618,38 @@ export async function getOrdersByPartyId(partyId: number) {
     .orderBy(desc(orders.orderedAt));
 }
 
-export async function updateOrder(id: number, data: Partial<InsertOrder>) {
+export async function updateOrder(
+  id: number,
+  data: Partial<InsertOrder> & { entrySource?: string | null; routeToKitchen?: boolean }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(orders).set(data).where(eq(orders.id, id));
+}
+
+export async function confirmOrderPayment(
+  id: number,
+  data: { paymentMethod: string; paidAt?: Date }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({
+    paymentStatus: "paid",
+    paymentMethod: data.paymentMethod,
+    paidAt: data.paidAt ?? new Date(),
+    paymentCanceledAt: null,
+  }).where(eq(orders.id, id));
+}
+
+export async function cancelOrderPayment(id: number, data: { canceledAt?: Date } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({
+    paymentStatus: "voided",
+    paymentMethod: null,
+    paidAt: null,
+    paymentCanceledAt: data.canceledAt ?? new Date(),
+  }).where(eq(orders.id, id));
 }
 
 export async function createOrderItem(data: InsertOrderItem) {
@@ -573,77 +665,36 @@ export async function getOrderItemsByOrderId(orderId: number) {
   return db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
 }
 
+export async function getOrderItemsForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(orders.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(orders.orderedAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(orders.orderedAt, options.endDate));
+  }
+
+  return db.select({
+    order: orders,
+    item: orderItems,
+  })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(...conditions))
+    .orderBy(desc(orders.orderedAt), desc(orderItems.id))
+    .limit(options.limit ?? 5000);
+}
+
 export async function updateOrderItem(id: number, data: Partial<InsertOrderItem>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(orderItems).set(data).where(eq(orderItems.id, id));
-}
-
-// ============================================
-// Data Export Functions
-// ============================================
-export async function getAllPartiesByStoreId(storeId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(parties)
-    .where(eq(parties.storeId, storeId))
-    .orderBy(desc(parties.registeredAt));
-}
-
-export async function getNotificationsByStoreId(storeId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(notifications)
-    .where(eq(notifications.storeId, storeId))
-    .orderBy(desc(notifications.createdAt));
-}
-
-export async function getAllOrdersByStoreId(storeId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(orders)
-    .where(eq(orders.storeId, storeId))
-    .orderBy(desc(orders.orderedAt));
-}
-
-export async function getOrderItemsByStoreId(storeId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  const results = await db.select({
-    id: orderItems.id,
-    orderId: orderItems.orderId,
-    menuItemId: orderItems.menuItemId,
-    quantity: orderItems.quantity,
-    unitPrice: orderItems.unitPrice,
-    modifiers: orderItems.modifiers,
-    modifierPrice: orderItems.modifierPrice,
-    subtotal: orderItems.subtotal,
-    notes: orderItems.notes,
-    status: orderItems.status,
-    createdAt: orderItems.createdAt,
-    updatedAt: orderItems.updatedAt,
-  })
-    .from(orderItems)
-    .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .where(eq(orders.storeId, storeId))
-    .orderBy(desc(orderItems.createdAt));
-  return results;
-}
-
-export async function getSubscriptionsByStoreId(storeId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(subscriptions)
-    .where(eq(subscriptions.storeId, storeId))
-    .orderBy(desc(subscriptions.createdAt));
-}
-
-export async function getDailyAnalyticsByStoreId(storeId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(dailyAnalytics)
-    .where(eq(dailyAnalytics.storeId, storeId))
-    .orderBy(desc(dailyAnalytics.date));
 }
 
 // ============================================
@@ -701,16 +752,6 @@ export async function deleteOrdersBefore(cutoff: Date) {
   return getAffectedRows(result);
 }
 
-export async function deleteAuditLogsBefore(cutoff: Date) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot delete audit logs: database not available");
-    return 0;
-  }
-  const result = await db.delete(auditLogs).where(lt(auditLogs.createdAt, cutoff));
-  return getAffectedRows(result);
-}
-
 export async function deleteSubscriptionsBefore(cutoff: Date) {
   const db = await getDb();
   if (!db) {
@@ -729,70 +770,6 @@ export async function deleteDailyAnalyticsBefore(cutoff: Date) {
   }
   const result = await db.delete(dailyAnalytics).where(lt(dailyAnalytics.createdAt, cutoff));
   return getAffectedRows(result);
-}
-
-// ============================================
-// Audit Log Functions
-// ============================================
-export async function createAuditLog(data: InsertAuditLog) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(auditLogs).values(data);
-  return result[0].insertId;
-}
-
-type AuditLogFilters = {
-  startDate?: Date;
-  endDate?: Date;
-  action?: string;
-  userId?: number;
-};
-
-type AuditLogCursor = {
-  createdAt: Date;
-  id: number;
-};
-
-type AuditLogQueryOptions = {
-  limit?: number;
-  cursor?: AuditLogCursor;
-  filters?: AuditLogFilters;
-};
-
-export async function getAuditLogsByStoreId(storeId: number, options: AuditLogQueryOptions = {}) {
-  const db = await getDb();
-  if (!db) return [];
-  const conditions = [eq(auditLogs.storeId, storeId)];
-
-  if (options.filters?.startDate) {
-    conditions.push(gte(auditLogs.createdAt, options.filters.startDate));
-  }
-  if (options.filters?.endDate) {
-    conditions.push(lte(auditLogs.createdAt, options.filters.endDate));
-  }
-  if (options.filters?.action) {
-    conditions.push(eq(auditLogs.action, options.filters.action));
-  }
-  if (options.filters?.userId) {
-    conditions.push(eq(auditLogs.userId, options.filters.userId));
-  }
-  if (options.cursor) {
-    const cursorCondition = or(
-      lt(auditLogs.createdAt, options.cursor.createdAt),
-      and(
-        eq(auditLogs.createdAt, options.cursor.createdAt),
-        lt(auditLogs.id, options.cursor.id)
-      )
-    );
-    if (cursorCondition) {
-      conditions.push(cursorCondition);
-    }
-  }
-
-  return db.select().from(auditLogs)
-    .where(and(...conditions))
-    .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id))
-    .limit(options.limit ?? 100);
 }
 
 // ============================================

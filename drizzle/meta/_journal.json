@@ -15,6 +15,13 @@
       "when": 1767123369916,
       "tag": "0001_kind_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1767353965288,
+      "tag": "0002_shallow_sir_ram",
+      "breakpoints": true
     }
   ]
 }
