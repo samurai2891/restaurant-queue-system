@@ -7,18 +7,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { 
-  Store, 
-  Plus, 
-  Users, 
-  Clock, 
-  Settings, 
-  ChefHat,
-  Utensils,
+import {
   BarChart3,
+  ChefHat,
+  CreditCard,
   Download,
+  Loader2,
   LogOut,
-  Loader2
+  Plus,
+  Settings,
+  Store,
+  Utensils,
+  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -204,26 +204,37 @@ export default function Dashboard() {
             </>
           ) : (
             stores?.map((store) => (
-              <Card key={store.id} className="card-hover">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
+              <Card key={store.id} className="card-hover overflow-hidden">
+                <CardHeader className="border-b bg-muted/20">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <CardTitle className="text-xl">{store.name}</CardTitle>
                       <CardDescription className="line-clamp-2">
                         {store.description || "説明なし"}
                       </CardDescription>
                     </div>
-                    <div className={`px-2 py-1 rounded text-xs font-medium ${
-                      store.isReceptionPaused 
-                        ? 'bg-red-100 text-red-700' 
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      {store.isReceptionPaused ? '受付停止中' : '受付中'}
+                    <div
+                      className={`px-2 py-1 rounded text-xs font-medium ${
+                        store.isReceptionPaused
+                          ? "bg-red-100 text-red-700"
+                          : "bg-green-100 text-green-700"
+                      }`}
+                    >
+                      {store.isReceptionPaused ? "受付停止中" : "受付中"}
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-2">
+                <CardContent className="space-y-4 p-4">
+                  <div className="rounded-lg border bg-background/60 p-3 text-xs text-muted-foreground">
+                    店舗ごとの主要導線をPOSカードでまとめています。
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Link href={`/cashier/${store.id}`}>
+                      <Button className="w-full justify-start gap-2">
+                        <CreditCard className="w-4 h-4" />
+                        レジ
+                      </Button>
+                    </Link>
                     <Link href={`/queue/${store.id}`}>
                       <Button variant="outline" className="w-full justify-start gap-2">
                         <Users className="w-4 h-4" />
@@ -254,7 +265,7 @@ export default function Dashboard() {
                         設定
                       </Button>
                     </Link>
-                    <Link href={`/export/${store.id}`}>
+                    <Link href={`/export/${store.id}`} className="col-span-2">
                       <Button variant="outline" className="w-full justify-start gap-2">
                         <Download className="w-4 h-4" />
                         データ出力

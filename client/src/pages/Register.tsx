@@ -19,7 +19,7 @@ import {
   ShieldCheck,
   Wallet,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
@@ -44,6 +44,7 @@ export default function Register() {
   const [notes, setNotes] = useState("");
   const [qrGenerated, setQrGenerated] = useState(false);
   const [manualPaymentMethod, setManualPaymentMethod] = useState("cash");
+  const [cashReceived, setCashReceived] = useState("");
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -116,6 +117,16 @@ export default function Register() {
   const canGenerateQr = hasCheckoutOrders;
   const isCreatingCheckoutOrder = createCheckoutOrderMutation.isPending;
   const isConfirmingPayment = confirmPaymentBatchMutation.isPending;
+  const isCashPayment = manualPaymentMethod === "cash";
+  const cashReceivedNumber = cashReceived ? Number(cashReceived) : 0;
+  const changeAmount = cashReceivedNumber - checkoutTotal;
+  const canConfirmManualPayment = !isCashPayment || cashReceivedNumber >= checkoutTotal;
+
+  useEffect(() => {
+    if (!isCashPayment && cashReceived) {
+      setCashReceived("");
+    }
+  }, [isCashPayment, cashReceived]);
 
   const handleCreateCheckoutOrder = async () => {
     if (!selectedPartyId) {
@@ -157,6 +168,10 @@ export default function Register() {
     }
     if (selectedPartyOrders.length === 0) {
       toast.error("会計対象の注文がありません");
+      return;
+    }
+    if (paymentMethod === "cash" && cashReceivedNumber < checkoutTotal) {
+      toast.error("受取金額が不足しています");
       return;
     }
 
@@ -521,10 +536,33 @@ export default function Register() {
                       </label>
                     </RadioGroup>
                   </div>
+                  {isCashPayment && (
+                    <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="register-cash-received">受取金額</Label>
+                        <Input
+                          id="register-cash-received"
+                          type="number"
+                          min={0}
+                          value={cashReceived}
+                          onChange={(event) => setCashReceived(event.target.value)}
+                          placeholder="例: 5000"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">お釣り</span>
+                        <span className={`font-semibold ${changeAmount < 0 ? "text-destructive" : "text-foreground"}`}>
+                          {changeAmount >= 0
+                            ? `¥${changeAmount.toLocaleString()}`
+                            : `不足 ¥${Math.abs(changeAmount).toLocaleString()}`}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <Button
                     className="w-full"
                     onClick={() => handleConfirmPayment(manualPaymentMethod)}
-                    disabled={!canGenerateQr || isConfirmingPayment}
+                    disabled={!canGenerateQr || isConfirmingPayment || !canConfirmManualPayment}
                   >
                     {isConfirmingPayment ? (
                       <>
