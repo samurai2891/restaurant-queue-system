@@ -266,6 +266,8 @@ export default function Cashier() {
           quantity: item.quantity,
         })),
         notes: notes || undefined,
+        status: "served",
+        routeToKitchen: false,
       });
 
       await refetchOrders();

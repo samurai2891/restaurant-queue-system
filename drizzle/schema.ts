@@ -268,6 +268,7 @@ export const orders = mysqlTable("orders", {
   partyId: int("partyId").notNull(),
   orderNumber: int("orderNumber").notNull(),
   status: mysqlEnum("status", ["pending", "confirmed", "preparing", "ready", "served", "canceled"]).default("pending").notNull(),
+  routeToKitchen: boolean("routeToKitchen").default(true).notNull(),
   totalAmount: decimal("totalAmount", { precision: 10, scale: 0 }).default("0"),
   notes: text("notes"),
   // 事前注文か着席後注文か

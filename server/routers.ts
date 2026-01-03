@@ -81,6 +81,8 @@ const createOrderWithItems = async ({
   items,
   notes,
   orderType,
+  status,
+  routeToKitchen,
 }: {
   storeId: number;
   partyId: number;
@@ -92,15 +94,24 @@ const createOrderWithItems = async ({
   }>;
   notes?: string;
   orderType: "dine_in" | "preorder";
+  status?: "pending" | "confirmed" | "preparing" | "ready" | "served" | "canceled";
+  routeToKitchen?: boolean;
 }) => {
   const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
+  const now = new Date();
+  const orderStatus = status ?? "pending";
 
   const orderResult = await db.createOrder({
     storeId,
     partyId,
+    status: orderStatus,
+    routeToKitchen: routeToKitchen ?? true,
     totalAmount: String(totalAmount),
     notes,
     orderType,
+    confirmedAt: orderStatus === "confirmed" ? now : undefined,
+    preparedAt: orderStatus === "ready" ? now : undefined,
+    servedAt: orderStatus === "served" ? now : undefined,
   });
 
   for (const itemData of orderItemsData) {
@@ -120,6 +131,8 @@ const createStaffOrder = async ({
   partyId,
   items,
   notes,
+  status,
+  routeToKitchen,
 }: {
   userId: number;
   storeId: number;
@@ -131,6 +144,8 @@ const createStaffOrder = async ({
     notes?: string;
   }>;
   notes?: string;
+  status?: "pending" | "confirmed" | "preparing" | "ready" | "served" | "canceled";
+  routeToKitchen?: boolean;
 }) => {
   await checkStoreAccess(userId, storeId);
 
@@ -149,6 +164,8 @@ const createStaffOrder = async ({
     items,
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
+    status,
+    routeToKitchen,
   });
 
   return {
@@ -977,6 +994,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      status: z.enum(["pending", "confirmed", "preparing", "ready", "served", "canceled"]).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
       userId: ctx.user.id,
@@ -984,6 +1003,8 @@ const orderRouter = router({
       partyId: input.partyId,
       items: input.items,
       notes: input.notes,
+      status: input.status,
+      routeToKitchen: input.routeToKitchen,
     })),
 
   // スタッフ用: 注文作成（保護API）
@@ -998,6 +1019,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      status: z.enum(["pending", "confirmed", "preparing", "ready", "served", "canceled"]).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
       userId: ctx.user.id,
@@ -1005,6 +1028,8 @@ const orderRouter = router({
       partyId: input.partyId,
       items: input.items,
       notes: input.notes,
+      status: input.status,
+      routeToKitchen: input.routeToKitchen,
     })),
 
   // 注文ステータス更新
@@ -1142,8 +1167,9 @@ const orderRouter = router({
       }
       
       const orders = await db.getOrdersByPartyId(party.id);
+      const routedOrders = orders.filter(order => order.routeToKitchen !== false);
       const ordersWithItems = await Promise.all(
-        orders.map(async (order) => {
+        routedOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
           const itemsWithMenu = await Promise.all(
             items.map(async (item) => {
