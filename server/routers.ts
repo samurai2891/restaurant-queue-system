@@ -1660,6 +1660,314 @@ const dataExportRouter = router({
     }),
 });
 
+// ============================================
+// Data Export Router
+// ============================================
+const dataExportRouter = router({
+  export: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      type: z.enum([
+        "parties",
+        "notifications",
+        "orders",
+        "order_items",
+        "audit_logs",
+        "subscriptions",
+        "daily_analytics",
+      ]),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const toIso = (value?: Date | null) => (value ? value.toISOString() : "");
+      const toText = (value?: unknown) => (value === null || value === undefined ? "" : String(value));
+      const toJson = (value?: unknown) => (value ? JSON.stringify(value) : "");
+
+      if (input.type === "parties") {
+        const items = await db.getAllPartiesByStoreId(input.storeId);
+        const header = [
+          "id",
+          "storeId",
+          "ticketNumber",
+          "guestName",
+          "partySize",
+          "childCount",
+          "hasStroller",
+          "phone",
+          "email",
+          "lineUserId",
+          "preferredSeatTypeId",
+          "assignedSeatTypeId",
+          "status",
+          "priority",
+          "notes",
+          "allergies",
+          "accessToken",
+          "estimatedWaitMinutes",
+          "registeredAt",
+          "notifiedAt",
+          "arrivedAt",
+          "seatedAt",
+          "completedAt",
+          "createdAt",
+          "updatedAt",
+        ];
+        const rows = items.map((item) => [
+          item.id,
+          item.storeId,
+          item.ticketNumber,
+          item.guestName,
+          item.partySize,
+          item.childCount,
+          item.hasStroller,
+          item.phone,
+          item.email,
+          item.lineUserId,
+          item.preferredSeatTypeId,
+          item.assignedSeatTypeId,
+          item.status,
+          item.priority,
+          item.notes,
+          item.allergies,
+          item.accessToken,
+          item.estimatedWaitMinutes,
+          toIso(item.registeredAt),
+          toIso(item.notifiedAt),
+          toIso(item.arrivedAt),
+          toIso(item.seatedAt),
+          toIso(item.completedAt),
+          toIso(item.createdAt),
+          toIso(item.updatedAt),
+        ].map(toText).map(escapeCsv).join(","));
+        return {
+          fileName: `parties-${input.storeId}-${dateStamp}.csv`,
+          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+        };
+      }
+
+      if (input.type === "notifications") {
+        const items = await db.getNotificationsByStoreId(input.storeId);
+        const header = [
+          "id",
+          "storeId",
+          "partyId",
+          "type",
+          "channel",
+          "recipient",
+          "subject",
+          "message",
+          "status",
+          "errorMessage",
+          "externalId",
+          "sentAt",
+          "deliveredAt",
+          "createdAt",
+        ];
+        const rows = items.map((item) => [
+          item.id,
+          item.storeId,
+          item.partyId,
+          item.type,
+          item.channel,
+          item.recipient,
+          item.subject,
+          item.message,
+          item.status,
+          item.errorMessage,
+          item.externalId,
+          toIso(item.sentAt),
+          toIso(item.deliveredAt),
+          toIso(item.createdAt),
+        ].map(toText).map(escapeCsv).join(","));
+        return {
+          fileName: `notifications-${input.storeId}-${dateStamp}.csv`,
+          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+        };
+      }
+
+      if (input.type === "orders") {
+        const items = await db.getAllOrdersByStoreId(input.storeId);
+        const header = [
+          "id",
+          "storeId",
+          "partyId",
+          "orderNumber",
+          "status",
+          "totalAmount",
+          "notes",
+          "orderType",
+          "orderedAt",
+          "confirmedAt",
+          "preparedAt",
+          "servedAt",
+          "createdAt",
+          "updatedAt",
+        ];
+        const rows = items.map((item) => [
+          item.id,
+          item.storeId,
+          item.partyId,
+          item.orderNumber,
+          item.status,
+          item.totalAmount,
+          item.notes,
+          item.orderType,
+          toIso(item.orderedAt),
+          toIso(item.confirmedAt),
+          toIso(item.preparedAt),
+          toIso(item.servedAt),
+          toIso(item.createdAt),
+          toIso(item.updatedAt),
+        ].map(toText).map(escapeCsv).join(","));
+        return {
+          fileName: `orders-${input.storeId}-${dateStamp}.csv`,
+          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+        };
+      }
+
+      if (input.type === "order_items") {
+        const items = await db.getOrderItemsByStoreId(input.storeId);
+        const header = [
+          "id",
+          "orderId",
+          "menuItemId",
+          "quantity",
+          "unitPrice",
+          "modifiers",
+          "modifierPrice",
+          "subtotal",
+          "notes",
+          "status",
+          "createdAt",
+          "updatedAt",
+        ];
+        const rows = items.map((item) => [
+          item.id,
+          item.orderId,
+          item.menuItemId,
+          item.quantity,
+          item.unitPrice,
+          toJson(item.modifiers),
+          item.modifierPrice,
+          item.subtotal,
+          item.notes,
+          item.status,
+          toIso(item.createdAt),
+          toIso(item.updatedAt),
+        ].map(toText).map(escapeCsv).join(","));
+        return {
+          fileName: `order-items-${input.storeId}-${dateStamp}.csv`,
+          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+        };
+      }
+
+      if (input.type === "audit_logs") {
+        const items = await db.getAuditLogsByStoreId(input.storeId, { limit: 5000 });
+        const header = ["日時", "ユーザー", "アクション", "対象", "詳細"];
+        const rows = items.map((log) => {
+          const target = log.targetType
+            ? `${log.targetType}${log.targetId ? `#${log.targetId}` : ""}`
+            : "";
+          const details = log.details ? JSON.stringify(log.details) : "";
+          return [
+            log.createdAt.toISOString(),
+            log.userId ? String(log.userId) : "system",
+            log.action,
+            target,
+            details,
+          ].map(escapeCsv).join(",");
+        });
+        return {
+          fileName: `audit-${input.storeId}-${dateStamp}.csv`,
+          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+        };
+      }
+
+      if (input.type === "subscriptions") {
+        const items = await db.getSubscriptionsByStoreId(input.storeId);
+        const header = [
+          "id",
+          "storeId",
+          "stripeSubscriptionId",
+          "plan",
+          "status",
+          "currentPeriodStart",
+          "currentPeriodEnd",
+          "canceledAt",
+          "createdAt",
+          "updatedAt",
+        ];
+        const rows = items.map((item) => [
+          item.id,
+          item.storeId,
+          item.stripeSubscriptionId,
+          item.plan,
+          item.status,
+          toIso(item.currentPeriodStart),
+          toIso(item.currentPeriodEnd),
+          toIso(item.canceledAt),
+          toIso(item.createdAt),
+          toIso(item.updatedAt),
+        ].map(toText).map(escapeCsv).join(","));
+        return {
+          fileName: `subscriptions-${input.storeId}-${dateStamp}.csv`,
+          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+        };
+      }
+
+      const items = await db.getDailyAnalyticsByStoreId(input.storeId);
+      const header = [
+        "id",
+        "storeId",
+        "date",
+        "totalParties",
+        "totalGuests",
+        "seatedCount",
+        "canceledCount",
+        "noshowCount",
+        "avgWaitTime",
+        "maxWaitTime",
+        "minWaitTime",
+        "avgTurnoverTime",
+        "notificationsSent",
+        "notificationsDelivered",
+        "notificationsFailed",
+        "totalOrders",
+        "totalOrderAmount",
+        "preorderCount",
+        "createdAt",
+        "updatedAt",
+      ];
+      const rows = items.map((item) => [
+        item.id,
+        item.storeId,
+        item.date,
+        item.totalParties,
+        item.totalGuests,
+        item.seatedCount,
+        item.canceledCount,
+        item.noshowCount,
+        item.avgWaitTime,
+        item.maxWaitTime,
+        item.minWaitTime,
+        item.avgTurnoverTime,
+        item.notificationsSent,
+        item.notificationsDelivered,
+        item.notificationsFailed,
+        item.totalOrders,
+        item.totalOrderAmount,
+        item.preorderCount,
+        toIso(item.createdAt),
+        toIso(item.updatedAt),
+      ].map(toText).map(escapeCsv).join(","));
+      return {
+        fileName: `daily-analytics-${input.storeId}-${dateStamp}.csv`,
+        csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+      };
+    }),
+});
+
 const dateOnlyPattern = /^\d{4}-\d{2}-\d{2}$/;
 
 function parseDateInput(value: string | undefined, boundary: "start" | "end") {

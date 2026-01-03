@@ -156,6 +156,11 @@ function DashboardLayoutContent({
       path: storeId ? `/analytics/${storeId}` : "/analytics",
     },
     {
+      icon: Download,
+      label: "データダウンロード",
+      path: storeId ? `/data/${storeId}` : "/data",
+    },
+    {
       icon: Settings,
       label: "設定",
       path: storeId ? `/settings/${storeId}` : "/settings",
