@@ -139,8 +139,7 @@ export async function getStoresByOwnerId(ownerId: number) {
 export async function getStoresForAutoNotification() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(stores)
-    .where(or(gt(stores.autoNotifyRank, 0), gt(stores.autoNotifyMinutes, 0)));
+  return db.select().from(stores);
 }
 
 export async function updateStore(id: number, data: Partial<InsertStore>) {

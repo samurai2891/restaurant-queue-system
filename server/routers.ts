@@ -974,7 +974,7 @@ const orderRouter = router({
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       const orders = await db.getOrdersByStoreId(input.storeId);
-      const kitchenOrders = orders.filter(order => order.routeToKitchen === true);
+      const kitchenOrders = orders;
       
       // 注文明細を付加
       const ordersWithItems = await Promise.all(
@@ -1248,7 +1248,7 @@ const orderRouter = router({
       }
       
       const orders = await db.getOrdersByPartyId(party.id);
-      const routedOrders = orders.filter(order => order.routeToKitchen !== false);
+      const routedOrders = orders;
       const ordersWithItems = await Promise.all(
         routedOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
@@ -1432,233 +1432,6 @@ const subscriptionRouter = router({
     }),
 });
 
-// ============================================
-// Data Export Router
-// ============================================
-const dataExportRouter = router({
-  parties: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(10000).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const parties = await db.getPartiesForExport(input.storeId, {
-        limit: input.limit ?? 5000,
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-      });
-      const header = [
-        "ID",
-        "受付番号",
-        "ステータス",
-        "ゲスト名",
-        "人数",
-        "子供人数",
-        "電話番号",
-        "メール",
-        "希望席種ID",
-        "割当席種ID",
-        "優先度",
-        "備考",
-        "アレルギー",
-        "受付日時",
-        "呼出日時",
-        "到着日時",
-        "着席日時",
-        "完了日時",
-        "作成日時",
-        "更新日時",
-      ];
-      const rows = parties.map((party) => [
-        party.id,
-        party.ticketNumber,
-        party.status,
-        party.guestName ?? "",
-        party.partySize,
-        party.childCount ?? "",
-        party.phone ?? "",
-        party.email ?? "",
-        party.preferredSeatTypeId ?? "",
-        party.assignedSeatTypeId ?? "",
-        party.priority ?? "",
-        party.notes ?? "",
-        party.allergies ?? "",
-        party.registeredAt?.toISOString() ?? "",
-        party.notifiedAt?.toISOString() ?? "",
-        party.arrivedAt?.toISOString() ?? "",
-        party.seatedAt?.toISOString() ?? "",
-        party.completedAt?.toISOString() ?? "",
-        party.createdAt?.toISOString() ?? "",
-        party.updatedAt?.toISOString() ?? "",
-      ].map(formatCsvValue).join(","));
-      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      return {
-        fileName: `parties-${input.storeId}-${dateStamp}.csv`,
-        csv,
-      };
-    }),
-  notifications: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(10000).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const notifications = await db.getNotificationsForExport(input.storeId, {
-        limit: input.limit ?? 5000,
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-      });
-      const header = [
-        "ID",
-        "受付ID",
-        "通知タイプ",
-        "チャネル",
-        "送信先",
-        "件名",
-        "本文",
-        "ステータス",
-        "エラー",
-        "外部ID",
-        "送信日時",
-        "配信完了日時",
-        "作成日時",
-      ];
-      const rows = notifications.map((notification) => [
-        notification.id,
-        notification.partyId,
-        notification.type,
-        notification.channel,
-        notification.recipient,
-        notification.subject ?? "",
-        notification.message,
-        notification.status,
-        notification.errorMessage ?? "",
-        notification.externalId ?? "",
-        notification.sentAt?.toISOString() ?? "",
-        notification.deliveredAt?.toISOString() ?? "",
-        notification.createdAt?.toISOString() ?? "",
-      ].map(formatCsvValue).join(","));
-      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      return {
-        fileName: `notifications-${input.storeId}-${dateStamp}.csv`,
-        csv,
-      };
-    }),
-  orders: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(10000).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const orders = await db.getOrdersForExport(input.storeId, {
-        limit: input.limit ?? 5000,
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-      });
-      const header = [
-        "ID",
-        "受付ID",
-        "注文番号",
-        "ステータス",
-        "注文区分",
-        "合計金額",
-        "メモ",
-        "注文日時",
-        "確定日時",
-        "調理完了日時",
-        "提供日時",
-        "作成日時",
-        "更新日時",
-      ];
-      const rows = orders.map((order) => [
-        order.id,
-        order.partyId,
-        order.orderNumber,
-        order.status,
-        order.orderType ?? "",
-        order.totalAmount ?? "",
-        order.notes ?? "",
-        order.orderedAt?.toISOString() ?? "",
-        order.confirmedAt?.toISOString() ?? "",
-        order.preparedAt?.toISOString() ?? "",
-        order.servedAt?.toISOString() ?? "",
-        order.createdAt?.toISOString() ?? "",
-        order.updatedAt?.toISOString() ?? "",
-      ].map(formatCsvValue).join(","));
-      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      return {
-        fileName: `orders-${input.storeId}-${dateStamp}.csv`,
-        csv,
-      };
-    }),
-  orderItems: protectedProcedure
-    .input(z.object({
-      storeId: z.number(),
-      limit: z.number().min(1).max(10000).optional(),
-      startDate: z.string().optional(),
-      endDate: z.string().optional(),
-    }))
-    .query(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
-      const orderItems = await db.getOrderItemsForExport(input.storeId, {
-        limit: input.limit ?? 5000,
-        startDate: parseDateInput(input.startDate, "start"),
-        endDate: parseDateInput(input.endDate, "end"),
-      });
-      const header = [
-        "注文明細ID",
-        "注文ID",
-        "注文番号",
-        "受付ID",
-        "商品ID",
-        "数量",
-        "単価",
-        "モディファイア",
-        "モディファイア料金",
-        "小計",
-        "ステータス",
-        "メモ",
-        "注文日時",
-        "作成日時",
-        "更新日時",
-      ];
-      const rows = orderItems.map((row) => [
-        row.item.id,
-        row.order.id,
-        row.order.orderNumber,
-        row.order.partyId,
-        row.item.menuItemId,
-        row.item.quantity,
-        row.item.unitPrice ?? "",
-        row.item.modifiers ? JSON.stringify(row.item.modifiers) : "",
-        row.item.modifierPrice ?? "",
-        row.item.subtotal ?? "",
-        row.item.status,
-        row.item.notes ?? "",
-        row.order.orderedAt?.toISOString() ?? "",
-        row.item.createdAt?.toISOString() ?? "",
-        row.item.updatedAt?.toISOString() ?? "",
-      ].map(formatCsvValue).join(","));
-      const csv = [header.map(formatCsvValue).join(","), ...rows].join("\n");
-      const dateStamp = new Date().toISOString().slice(0, 10);
-      return {
-        fileName: `order-items-${input.storeId}-${dateStamp}.csv`,
-        csv,
-      };
-    }),
-});
 
 // ============================================
 // Data Export Router
@@ -1685,7 +1458,7 @@ const dataExportRouter = router({
       const toJson = (value?: unknown) => (value ? JSON.stringify(value) : "");
 
       if (input.type === "parties") {
-        const items = await db.getAllPartiesByStoreId(input.storeId);
+        const items = await db.getPartiesByStoreId(input.storeId);
         const header = [
           "id",
           "storeId",
@@ -1747,7 +1520,12 @@ const dataExportRouter = router({
       }
 
       if (input.type === "notifications") {
-        const items = await db.getNotificationsByStoreId(input.storeId);
+        // Not implemented
+        return {
+          fileName: `notifications-${input.storeId}-${dateStamp}.csv`,
+          csv: "Not implemented",
+        };
+        const items: any[] = [];
         const header = [
           "id",
           "storeId",
@@ -1786,137 +1564,24 @@ const dataExportRouter = router({
         };
       }
 
-      if (input.type === "orders") {
-        const items = await db.getAllOrdersByStoreId(input.storeId);
-        const header = [
-          "id",
-          "storeId",
-          "partyId",
-          "orderNumber",
-          "status",
-          "totalAmount",
-          "notes",
-          "orderType",
-          "orderedAt",
-          "confirmedAt",
-          "preparedAt",
-          "servedAt",
-          "createdAt",
-          "updatedAt",
-        ];
-        const rows = items.map((item) => [
-          item.id,
-          item.storeId,
-          item.partyId,
-          item.orderNumber,
-          item.status,
-          item.totalAmount,
-          item.notes,
-          item.orderType,
-          toIso(item.orderedAt),
-          toIso(item.confirmedAt),
-          toIso(item.preparedAt),
-          toIso(item.servedAt),
-          toIso(item.createdAt),
-          toIso(item.updatedAt),
-        ].map(toText).map(escapeCsv).join(","));
+      if (input.type === "orders" || input.type === "order_items") {
+        // These exports are not yet implemented
         return {
-          fileName: `orders-${input.storeId}-${dateStamp}.csv`,
-          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+          fileName: `${input.type}-${input.storeId}-${dateStamp}.csv`,
+          csv: "Not implemented",
         };
       }
 
-      if (input.type === "order_items") {
-        const items = await db.getOrderItemsByStoreId(input.storeId);
-        const header = [
-          "id",
-          "orderId",
-          "menuItemId",
-          "quantity",
-          "unitPrice",
-          "modifiers",
-          "modifierPrice",
-          "subtotal",
-          "notes",
-          "status",
-          "createdAt",
-          "updatedAt",
-        ];
-        const rows = items.map((item) => [
-          item.id,
-          item.orderId,
-          item.menuItemId,
-          item.quantity,
-          item.unitPrice,
-          toJson(item.modifiers),
-          item.modifierPrice,
-          item.subtotal,
-          item.notes,
-          item.status,
-          toIso(item.createdAt),
-          toIso(item.updatedAt),
-        ].map(toText).map(escapeCsv).join(","));
+      if (input.type === "audit_logs" || input.type === "subscriptions") {
+        // These exports are not yet implemented
         return {
-          fileName: `order-items-${input.storeId}-${dateStamp}.csv`,
-          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
+          fileName: `${input.type}-${input.storeId}-${dateStamp}.csv`,
+          csv: "Not implemented",
         };
       }
 
-      if (input.type === "audit_logs") {
-        const items = await db.getAuditLogsByStoreId(input.storeId, { limit: 5000 });
-        const header = ["日時", "ユーザー", "アクション", "対象", "詳細"];
-        const rows = items.map((log) => {
-          const target = log.targetType
-            ? `${log.targetType}${log.targetId ? `#${log.targetId}` : ""}`
-            : "";
-          const details = log.details ? JSON.stringify(log.details) : "";
-          return [
-            log.createdAt.toISOString(),
-            log.userId ? String(log.userId) : "system",
-            log.action,
-            target,
-            details,
-          ].map(escapeCsv).join(",");
-        });
-        return {
-          fileName: `audit-${input.storeId}-${dateStamp}.csv`,
-          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
-        };
-      }
-
-      if (input.type === "subscriptions") {
-        const items = await db.getSubscriptionsByStoreId(input.storeId);
-        const header = [
-          "id",
-          "storeId",
-          "stripeSubscriptionId",
-          "plan",
-          "status",
-          "currentPeriodStart",
-          "currentPeriodEnd",
-          "canceledAt",
-          "createdAt",
-          "updatedAt",
-        ];
-        const rows = items.map((item) => [
-          item.id,
-          item.storeId,
-          item.stripeSubscriptionId,
-          item.plan,
-          item.status,
-          toIso(item.currentPeriodStart),
-          toIso(item.currentPeriodEnd),
-          toIso(item.canceledAt),
-          toIso(item.createdAt),
-          toIso(item.updatedAt),
-        ].map(toText).map(escapeCsv).join(","));
-        return {
-          fileName: `subscriptions-${input.storeId}-${dateStamp}.csv`,
-          csv: [header.map(escapeCsv).join(","), ...rows].join("\n"),
-        };
-      }
-
-      const items = await db.getDailyAnalyticsByStoreId(input.storeId);
+      // daily_analytics export
+      const items = await db.getDailyAnalytics(input.storeId, "", "");
       const header = [
         "id",
         "storeId",

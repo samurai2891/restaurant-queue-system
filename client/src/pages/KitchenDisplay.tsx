@@ -81,7 +81,7 @@ export default function KitchenDisplay() {
     );
   }
 
-  const kitchenOrders = orders?.filter(o => o.routeToKitchen === true) || [];
+  const kitchenOrders = orders || [];
   const pendingOrders = kitchenOrders.filter(o => o.status === "pending");
   const preparingOrders = kitchenOrders.filter(o => o.status === "preparing");
   const readyOrders = kitchenOrders.filter(o => o.status === "ready");

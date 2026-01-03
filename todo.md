@@ -105,3 +105,4 @@
 
 ## バグ修正（2026-01-02）
 - [x] ダッシュボードページで発生している「Unexpected token '<', "<!doctype "... is not valid JSON」エラーを修正（lt関数のインポート漏れを修正）
+- [x] GitHub同期時のマージコンフリクトを解決（dataExportRouter重複、routeToKitchen重複、autoNotifyRank/Minutes削除）

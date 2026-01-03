@@ -18,7 +18,7 @@ import { type ElementType, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
-type ExportType = "parties" | "notifications" | "orders" | "orderItems";
+type ExportType = "parties" | "notifications" | "orders" | "order_items" | "daily_analytics" | "audit_logs" | "subscriptions";
 
 type ExportConfig = {
   key: ExportType;
@@ -47,7 +47,7 @@ const exportConfigs: ExportConfig[] = [
     icon: Receipt,
   },
   {
-    key: "orderItems",
+    key: "order_items",
     title: "注文明細",
     description: "注文に紐づく明細をCSVで出力します。",
     icon: FileText,
@@ -98,27 +98,9 @@ export default function DataExport() {
         endDate: endDate || undefined,
         limit: 5000,
       };
-      if (type === "parties") {
-        const data = await utils.client.dataExport.parties.query(baseParams);
-        downloadCsv(data.fileName, data.csv);
-        toast.success("受付データCSVをダウンロードしました");
-        return;
-      }
-      if (type === "notifications") {
-        const data = await utils.client.dataExport.notifications.query(baseParams);
-        downloadCsv(data.fileName, data.csv);
-        toast.success("通知履歴CSVをダウンロードしました");
-        return;
-      }
-      if (type === "orders") {
-        const data = await utils.client.dataExport.orders.query(baseParams);
-        downloadCsv(data.fileName, data.csv);
-        toast.success("注文CSVをダウンロードしました");
-        return;
-      }
-      const data = await utils.client.dataExport.orderItems.query(baseParams);
+      const data = await utils.client.dataExport.export.query({ storeId: baseParams.storeId, type });
       downloadCsv(data.fileName, data.csv);
-      toast.success("注文明細CSVをダウンロードしました");
+      toast.success(`${type}CSVをダウンロードしました`);
     } catch (error: any) {
       toast.error(`エラー: ${error.message}`);
     } finally {
