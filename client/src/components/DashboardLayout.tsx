@@ -25,9 +25,12 @@ import {
   BarChart3,
   ChefHat,
   ClipboardList,
+  CreditCard,
+  Download,
   LogOut,
   PanelLeft,
   Settings,
+  ShoppingCart,
   UtensilsCrossed,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -117,11 +120,16 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
   const storeIdMatch = location.match(
-    /\/(queue|menu|kitchen|analytics|settings)\/([^/]+)/
+    /\/(register|queue|menu|cashier|kitchen|analytics|settings|export)\/([^/]+)/
   );
   const storeId = storeIdMatch?.[2];
 
   const menuItems = [
+    {
+      icon: CreditCard,
+      label: "レジ",
+      path: storeId ? `/register/${storeId}` : "/register",
+    },
     {
       icon: ClipboardList,
       label: "キュー管理",
@@ -131,6 +139,11 @@ function DashboardLayoutContent({
       icon: UtensilsCrossed,
       label: "メニュー管理",
       path: storeId ? `/menu/${storeId}` : "/menu",
+    },
+    {
+      icon: ShoppingCart,
+      label: "注文受付",
+      path: storeId ? `/cashier/${storeId}` : "/cashier",
     },
     {
       icon: ChefHat,
@@ -146,6 +159,11 @@ function DashboardLayoutContent({
       icon: Settings,
       label: "設定",
       path: storeId ? `/settings/${storeId}` : "/settings",
+    },
+    {
+      icon: Download,
+      label: "データ出力",
+      path: storeId ? `/export/${storeId}` : "/export",
     },
   ];
 

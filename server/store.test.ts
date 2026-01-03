@@ -6,7 +6,6 @@ import type { TrpcContext } from "./_core/context";
 vi.mock("./db", () => ({
   createStore: vi.fn().mockResolvedValue(1),
   addStoreStaff: vi.fn().mockResolvedValue(undefined),
-  createAuditLog: vi.fn().mockResolvedValue(undefined),
   getStoresByOwnerId: vi.fn().mockResolvedValue([
     {
       id: 1,

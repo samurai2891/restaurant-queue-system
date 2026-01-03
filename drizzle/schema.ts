@@ -275,6 +275,14 @@ export const orders = mysqlTable("orders", {
   notes: text("notes"),
   // 事前注文か着席後注文か
   orderType: mysqlEnum("orderType", ["preorder", "dine_in"]).default("preorder"),
+  // キッチン導線/受付経路
+  routeToKitchen: boolean("routeToKitchen").default(true).notNull(),
+  entrySource: varchar("entrySource", { length: 32 }),
+  // 支払い情報
+  paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "voided"]).default("unpaid").notNull(),
+  paymentMethod: varchar("paymentMethod", { length: 50 }),
+  paidAt: timestamp("paidAt"),
+  paymentCanceledAt: timestamp("paymentCanceledAt"),
   orderedAt: timestamp("orderedAt").defaultNow().notNull(),
   confirmedAt: timestamp("confirmedAt"),
   preparedAt: timestamp("preparedAt"),
@@ -307,25 +315,6 @@ export const orderItems = mysqlTable("order_items", {
 
 export type OrderItem = typeof orderItems.$inferSelect;
 export type InsertOrderItem = typeof orderItems.$inferInsert;
-
-// ============================================
-// Audit Log (監査ログ)
-// ============================================
-export const auditLogs = mysqlTable("audit_logs", {
-  id: int("id").autoincrement().primaryKey(),
-  storeId: int("storeId").notNull(),
-  userId: int("userId"),
-  action: varchar("action", { length: 100 }).notNull(), // party.create, party.seat, order.confirm など
-  targetType: varchar("targetType", { length: 50 }), // party, order, store など
-  targetId: int("targetId"),
-  details: json("details"), // 変更前後の値など
-  ipAddress: varchar("ipAddress", { length: 45 }),
-  userAgent: text("userAgent"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-export type AuditLog = typeof auditLogs.$inferSelect;
-export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
 // ============================================
 // Subscription (サブスクリプション履歴)

@@ -24,7 +24,6 @@ vi.mock("./db", () => ({
     ticketNumber: 101,
     accessToken: "test-token-123",
   }),
-  createAuditLog: vi.fn().mockResolvedValue(undefined),
   getPartiesByStoreId: vi.fn().mockResolvedValue([
     {
       id: 1,
@@ -132,7 +131,7 @@ describe("party.guestRegister", () => {
 
     expect(result.ticketNumber).toBe(101);
     expect(result.accessToken).toBe("test-token-123");
-    expect(result.estimatedWaitMinutes).toBe(0);
+    expect(result.estimatedWaitMinutes).toBe(null);
   });
 });
 

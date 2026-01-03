@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, sql, gte, lte, or, gt } from "drizzle-orm";
+import { eq, and, desc, asc, sql, gte, lte, lt, or, gt, SQL, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, users, 
@@ -13,7 +13,6 @@ import {
   menuModifiers, InsertMenuModifier,
   orders, InsertOrder,
   orderItems, InsertOrderItem,
-  auditLogs, InsertAuditLog,
   subscriptions, InsertSubscription,
   dailyAnalytics, InsertDailyAnalytics
 } from "../drizzle/schema";
@@ -301,6 +300,27 @@ export async function getPartiesByStoreId(storeId: number, status?: string[]) {
   return query;
 }
 
+export async function getPartiesForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(parties.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(parties.registeredAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(parties.registeredAt, options.endDate));
+  }
+
+  return db.select().from(parties)
+    .where(and(...conditions))
+    .orderBy(desc(parties.registeredAt))
+    .limit(options.limit ?? 5000);
+}
+
 export async function getActivePartyCount(storeId: number) {
   const parties = await getPartiesByStoreId(storeId);
   return parties.filter(p => ["waiting", "notified", "arrived"].includes(p.status)).length;
@@ -384,6 +404,27 @@ export async function getLatestNotificationByPartyAndType(partyId: number, type:
     .orderBy(desc(notifications.createdAt))
     .limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getNotificationsForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(notifications.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(notifications.createdAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(notifications.createdAt, options.endDate));
+  }
+
+  return db.select().from(notifications)
+    .where(and(...conditions))
+    .orderBy(desc(notifications.createdAt))
+    .limit(options.limit ?? 5000);
 }
 
 export async function updateNotification(id: number, data: Partial<InsertNotification>) {
@@ -532,7 +573,9 @@ export async function getNextOrderNumber(storeId: number): Promise<number> {
   return (result[0]?.maxOrder || 0) + 1;
 }
 
-export async function createOrder(data: Omit<InsertOrder, 'orderNumber'>) {
+export async function createOrder(
+  data: Omit<InsertOrder, "orderNumber"> & { entrySource?: string | null; routeToKitchen?: boolean }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
@@ -563,6 +606,27 @@ export async function getOrdersByStoreId(storeId: number, status?: string[]) {
     .orderBy(desc(orders.orderedAt));
 }
 
+export async function getOrdersForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(orders.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(orders.orderedAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(orders.orderedAt, options.endDate));
+  }
+
+  return db.select().from(orders)
+    .where(and(...conditions))
+    .orderBy(desc(orders.orderedAt))
+    .limit(options.limit ?? 5000);
+}
+
 export async function getOrdersByPartyId(partyId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -571,10 +635,38 @@ export async function getOrdersByPartyId(partyId: number) {
     .orderBy(desc(orders.orderedAt));
 }
 
-export async function updateOrder(id: number, data: Partial<InsertOrder>) {
+export async function updateOrder(
+  id: number,
+  data: Partial<InsertOrder> & { entrySource?: string | null; routeToKitchen?: boolean }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(orders).set(data).where(eq(orders.id, id));
+}
+
+export async function confirmOrderPayment(
+  id: number,
+  data: { paymentMethod: string; paidAt?: Date }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({
+    paymentStatus: "paid",
+    paymentMethod: data.paymentMethod,
+    paidAt: data.paidAt ?? new Date(),
+    paymentCanceledAt: null,
+  }).where(eq(orders.id, id));
+}
+
+export async function cancelOrderPayment(id: number, data: { canceledAt?: Date } = {}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(orders).set({
+    paymentStatus: "voided",
+    paymentMethod: null,
+    paidAt: null,
+    paymentCanceledAt: data.canceledAt ?? new Date(),
+  }).where(eq(orders.id, id));
 }
 
 export async function createOrderItem(data: InsertOrderItem) {
@@ -590,6 +682,32 @@ export async function getOrderItemsByOrderId(orderId: number) {
   return db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
 }
 
+export async function getOrderItemsForExport(
+  storeId: number,
+  options: { startDate?: Date; endDate?: Date; limit?: number } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions = [eq(orders.storeId, storeId)];
+  if (options.startDate) {
+    conditions.push(gte(orders.orderedAt, options.startDate));
+  }
+  if (options.endDate) {
+    conditions.push(lte(orders.orderedAt, options.endDate));
+  }
+
+  return db.select({
+    order: orders,
+    item: orderItems,
+  })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(...conditions))
+    .orderBy(desc(orders.orderedAt), desc(orderItems.id))
+    .limit(options.limit ?? 5000);
+}
+
 export async function updateOrderItem(id: number, data: Partial<InsertOrderItem>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -597,22 +715,78 @@ export async function updateOrderItem(id: number, data: Partial<InsertOrderItem>
 }
 
 // ============================================
-// Audit Log Functions
+// Data Retention Functions
 // ============================================
-export async function createAuditLog(data: InsertAuditLog) {
+const getAffectedRows = (result: unknown): number => {
+  if (Array.isArray(result) && result[0] && typeof result[0].affectedRows === "number") {
+    return result[0].affectedRows;
+  }
+  return 0;
+};
+
+export async function deletePartiesBefore(cutoff: Date) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const result = await db.insert(auditLogs).values(data);
-  return result[0].insertId;
+  if (!db) {
+    console.warn("[Database] Cannot delete parties: database not available");
+    return 0;
+  }
+  const result = await db.delete(parties).where(lt(parties.registeredAt, cutoff));
+  return getAffectedRows(result);
 }
 
-export async function getAuditLogsByStoreId(storeId: number, limit = 100) {
+export async function deleteNotificationsBefore(cutoff: Date) {
   const db = await getDb();
-  if (!db) return [];
-  return db.select().from(auditLogs)
-    .where(eq(auditLogs.storeId, storeId))
-    .orderBy(desc(auditLogs.createdAt))
-    .limit(limit);
+  if (!db) {
+    console.warn("[Database] Cannot delete notifications: database not available");
+    return 0;
+  }
+  const result = await db.delete(notifications).where(lt(notifications.createdAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteOrderItemsBeforeOrderDate(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete order items: database not available");
+    return 0;
+  }
+  const result = await db.execute(sql`
+    delete from ${orderItems}
+    where ${orderItems.orderId} in (
+      select ${orders.id} from ${orders} where ${orders.orderedAt} < ${cutoff}
+    )
+  `);
+  return getAffectedRows(result);
+}
+
+export async function deleteOrdersBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete orders: database not available");
+    return 0;
+  }
+  const result = await db.delete(orders).where(lt(orders.orderedAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteSubscriptionsBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete subscriptions: database not available");
+    return 0;
+  }
+  const result = await db.delete(subscriptions).where(lt(subscriptions.createdAt, cutoff));
+  return getAffectedRows(result);
+}
+
+export async function deleteDailyAnalyticsBefore(cutoff: Date) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot delete daily analytics: database not available");
+    return 0;
+  }
+  const result = await db.delete(dailyAnalytics).where(lt(dailyAnalytics.createdAt, cutoff));
+  return getAffectedRows(result);
 }
 
 // ============================================
@@ -672,6 +846,117 @@ export async function getDailyAnalytics(storeId: number, startDate: string, endD
       lte(dailyAnalytics.date, endDate)
     ))
     .orderBy(asc(dailyAnalytics.date));
+}
+
+type WaitTimeSampleRow = {
+  hour: number;
+  seatTypeId: number | null;
+  seatTypeName: string | null;
+  waitMinutes: number | null;
+};
+
+type WaitTimeDistributionBucket = {
+  bucket: string;
+  count: number;
+};
+
+export type WaitTimeByHourStat = {
+  hour: number;
+  seatTypeId: number | null;
+  seatTypeName: string;
+  count: number;
+  avgWait: number;
+  medianWait: number;
+  p95Wait: number;
+  minWait: number;
+  maxWait: number;
+  distribution: WaitTimeDistributionBucket[];
+};
+
+const waitTimeBuckets = [
+  { label: "0-10", min: 0, max: 10 },
+  { label: "11-20", min: 11, max: 20 },
+  { label: "21-30", min: 21, max: 30 },
+  { label: "31-45", min: 31, max: 45 },
+  { label: "46-60", min: 46, max: 60 },
+  { label: "61+", min: 61, max: Number.POSITIVE_INFINITY },
+];
+
+const nearestRank = (sorted: number[], percentile: number) => {
+  if (sorted.length === 0) return 0;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(percentile * sorted.length) - 1));
+  return sorted[index];
+};
+
+const buildDistribution = (waitTimes: number[]) =>
+  waitTimeBuckets.map((bucket) => ({
+    bucket: bucket.label,
+    count: waitTimes.filter((value) => value >= bucket.min && value <= bucket.max).length,
+  }));
+
+export async function getWaitTimeStatsByHour(storeId: number, startDate: string, endDate: string): Promise<WaitTimeByHourStat[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rawRows = await db.execute<WaitTimeSampleRow>(sql`
+    select
+      hour(${parties.registeredAt}) as hour,
+      coalesce(${parties.assignedSeatTypeId}, ${parties.preferredSeatTypeId}) as seatTypeId,
+      ${seatTypes.name} as seatTypeName,
+      timestampdiff(minute, ${parties.registeredAt}, ${parties.seatedAt}) as waitMinutes
+    from ${parties}
+    left join ${seatTypes}
+      on ${seatTypes.id} = coalesce(${parties.assignedSeatTypeId}, ${parties.preferredSeatTypeId})
+    where ${parties.storeId} = ${storeId}
+      and ${parties.seatedAt} is not null
+      and ${parties.registeredAt} is not null
+      and ${parties.registeredAt} >= ${startDate}
+      and ${parties.registeredAt} < date_add(${endDate}, interval 1 day)
+  `);
+
+  const rows: WaitTimeSampleRow[] = Array.isArray(rawRows) ? rawRows : (rawRows as any).rows || [];
+  const grouped = new Map<string, { meta: Omit<WaitTimeByHourStat, "count" | "avgWait" | "medianWait" | "p95Wait" | "minWait" | "maxWait" | "distribution">; waits: number[] }>();
+
+  rows.forEach((row: WaitTimeSampleRow) => {
+    if (row.waitMinutes === null || row.waitMinutes === undefined) return;
+    const hour = Number(row.hour);
+    const seatTypeId = row.seatTypeId === null ? null : Number(row.seatTypeId);
+    const seatTypeName = row.seatTypeName ?? "未指定";
+    const key = `${hour}-${seatTypeId ?? "unassigned"}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.waits.push(Number(row.waitMinutes));
+      return;
+    }
+    grouped.set(key, {
+      meta: {
+        hour,
+        seatTypeId,
+        seatTypeName,
+      },
+      waits: [Number(row.waitMinutes)],
+    });
+  });
+
+  return Array.from(grouped.values())
+    .map(({ meta, waits }) => {
+      const sorted = waits.slice().sort((a, b) => a - b);
+      const total = sorted.reduce((sum, value) => sum + value, 0);
+      const avg = sorted.length > 0 ? Math.round(total / sorted.length) : 0;
+      const median = nearestRank(sorted, 0.5);
+      const p95 = nearestRank(sorted, 0.95);
+      return {
+        ...meta,
+        count: sorted.length,
+        avgWait: avg,
+        medianWait: median,
+        p95Wait: p95,
+        minWait: sorted[0] ?? 0,
+        maxWait: sorted[sorted.length - 1] ?? 0,
+        distribution: buildDistribution(sorted),
+      };
+    })
+    .sort((a, b) => (a.hour - b.hour) || a.seatTypeName.localeCompare(b.seatTypeName, "ja"));
 }
 
 // ============================================

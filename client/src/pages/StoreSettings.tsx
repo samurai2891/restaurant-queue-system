@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { 
-  Store, 
   ArrowLeft,
   Loader2,
   Settings,
@@ -19,9 +18,9 @@ import {
   Bell,
   Plus,
   Trash2,
-  Save
+  Save,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
@@ -81,6 +80,7 @@ export default function StoreSettings() {
       setAutoNotifyMinutes(String(store.autoNotifyMinutes ?? 0));
     }
   }, [store]);
+
 
   const updateStoreMutation = trpc.store.update.useMutation({
     onSuccess: () => {
