@@ -82,6 +82,7 @@ const createOrderWithItems = async ({
   notes,
   orderType,
   status,
+  entrySource,
   routeToKitchen,
 }: {
   storeId: number;
@@ -95,6 +96,7 @@ const createOrderWithItems = async ({
   notes?: string;
   orderType: "dine_in" | "preorder";
   status?: "pending" | "confirmed" | "preparing" | "ready" | "served" | "canceled";
+  entrySource?: string;
   routeToKitchen?: boolean;
 }) => {
   const { totalAmount, orderItemsData } = await buildOrderItemsData(items);
@@ -109,20 +111,24 @@ const createOrderWithItems = async ({
     totalAmount: String(totalAmount),
     notes,
     orderType,
+    entrySource,
     confirmedAt: orderStatus === "confirmed" ? now : undefined,
     preparedAt: orderStatus === "ready" ? now : undefined,
     servedAt: orderStatus === "served" ? now : undefined,
   });
 
+  const orderItemIds: number[] = [];
+
   for (const itemData of orderItemsData) {
-    await db.createOrderItem({
+    const orderItemId = await db.createOrderItem({
       orderId: orderResult.id,
       ...itemData,
     });
+    orderItemIds.push(orderItemId);
     await db.consumeMenuItemStock(itemData.menuItemId, itemData.quantity);
   }
 
-  return { orderResult, totalAmount };
+  return { orderResult, totalAmount, orderItemIds };
 };
 
 const createStaffOrder = async ({
@@ -132,6 +138,7 @@ const createStaffOrder = async ({
   items,
   notes,
   status,
+  entrySource,
   routeToKitchen,
 }: {
   userId: number;
@@ -145,6 +152,7 @@ const createStaffOrder = async ({
   }>;
   notes?: string;
   status?: "pending" | "confirmed" | "preparing" | "ready" | "served" | "canceled";
+  entrySource?: string;
   routeToKitchen?: boolean;
 }) => {
   await checkStoreAccess(userId, storeId);
@@ -165,8 +173,68 @@ const createStaffOrder = async ({
     notes,
     orderType: party.status === "seated" ? "dine_in" : "preorder",
     status,
+    entrySource: entrySource ?? "staff",
     routeToKitchen,
   });
+
+  return {
+    orderId: orderResult.id,
+    orderNumber: orderResult.orderNumber,
+    totalAmount,
+  };
+};
+
+const createCheckoutOrder = async ({
+  userId,
+  storeId,
+  partyId,
+  items,
+  notes,
+}: {
+  userId: number;
+  storeId: number;
+  partyId: number;
+  items: Array<{
+    menuItemId: number;
+    quantity: number;
+    modifiers?: unknown;
+    notes?: string;
+  }>;
+  notes?: string;
+}) => {
+  await checkStoreAccess(userId, storeId);
+
+  const party = await db.getPartyById(partyId);
+  if (!party || party.storeId !== storeId) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+  }
+
+  if (party.status === "canceled" || party.status === "noshow") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+  }
+
+  const { orderResult, totalAmount, orderItemIds } = await createOrderWithItems({
+    storeId: party.storeId,
+    partyId: party.id,
+    items,
+    notes,
+    orderType: party.status === "seated" ? "dine_in" : "preorder",
+    routeToKitchen: false,
+  });
+
+  const now = new Date();
+  await db.updateOrder(orderResult.id, {
+    status: "served",
+    confirmedAt: now,
+    preparedAt: now,
+    servedAt: now,
+  });
+
+  for (const orderItemId of orderItemIds) {
+    await db.updateOrderItem(orderItemId, {
+      status: "served",
+    });
+  }
 
   return {
     orderId: orderResult.id,
@@ -923,10 +991,11 @@ const orderRouter = router({
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       const orders = await db.getOrdersByStoreId(input.storeId);
+      const kitchenOrders = orders.filter(order => order.routeToKitchen === true);
       
       // 注文明細を付加
       const ordersWithItems = await Promise.all(
-        orders.map(async (order) => {
+        kitchenOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
           const party = await db.getPartyById(order.partyId);
           return { ...order, items, party };
@@ -947,6 +1016,8 @@ const orderRouter = router({
         notes: z.string().optional(),
       })),
       notes: z.string().optional(),
+      entrySource: z.string().max(32).optional(),
+      routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
       const party = await db.getPartyByAccessToken(input.accessToken);
@@ -973,6 +1044,8 @@ const orderRouter = router({
         items: input.items,
         notes: input.notes,
         orderType: party.status === "seated" ? "dine_in" : "preorder",
+        entrySource: input.entrySource ?? "guest",
+        routeToKitchen: input.routeToKitchen,
       });
       
       return {
@@ -995,6 +1068,7 @@ const orderRouter = router({
       })),
       notes: z.string().optional(),
       status: z.enum(["pending", "confirmed", "preparing", "ready", "served", "canceled"]).optional(),
+      entrySource: z.string().max(32).optional(),
       routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
@@ -1004,7 +1078,29 @@ const orderRouter = router({
       items: input.items,
       notes: input.notes,
       status: input.status,
+      entrySource: input.entrySource,
       routeToKitchen: input.routeToKitchen,
+    })),
+
+  // 会計時入力専用: 注文作成（厨房へ出さない）
+  createForCheckout: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      partyId: z.number(),
+      items: z.array(z.object({
+        menuItemId: z.number(),
+        quantity: z.number().min(1),
+        modifiers: z.any().optional(),
+        notes: z.string().optional(),
+      })),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => createCheckoutOrder({
+      userId: ctx.user.id,
+      storeId: input.storeId,
+      partyId: input.partyId,
+      items: input.items,
+      notes: input.notes,
     })),
 
   // スタッフ用: 注文作成（保護API）
@@ -1020,6 +1116,7 @@ const orderRouter = router({
       })),
       notes: z.string().optional(),
       status: z.enum(["pending", "confirmed", "preparing", "ready", "served", "canceled"]).optional(),
+      entrySource: z.string().max(32).optional(),
       routeToKitchen: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => createStaffOrder({
@@ -1029,6 +1126,7 @@ const orderRouter = router({
       items: input.items,
       notes: input.notes,
       status: input.status,
+      entrySource: input.entrySource,
       routeToKitchen: input.routeToKitchen,
     })),
 

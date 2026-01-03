@@ -81,10 +81,10 @@ export default function KitchenDisplay() {
     );
   }
 
-  const routedOrders = orders?.filter(o => o.routeToKitchen !== false) || [];
-  const pendingOrders = routedOrders.filter(o => o.status === "pending");
-  const preparingOrders = routedOrders.filter(o => o.status === "preparing");
-  const readyOrders = routedOrders.filter(o => o.status === "ready");
+  const kitchenOrders = orders?.filter(o => o.routeToKitchen === true) || [];
+  const pendingOrders = kitchenOrders.filter(o => o.status === "pending");
+  const preparingOrders = kitchenOrders.filter(o => o.status === "preparing");
+  const readyOrders = kitchenOrders.filter(o => o.status === "ready");
 
   return (
     <div className="min-h-screen bg-background">

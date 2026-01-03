@@ -10,19 +10,13 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { CartBuilder, CartDetailContent } from "@/components/Register/CartBuilder";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
   CheckCircle,
   Loader2,
-  Minus,
-  Plus,
-  ShoppingCart,
-  Trash2,
-  UtensilsCrossed,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -49,7 +43,6 @@ export default function Cashier() {
   const storeIdNum = parseInt(storeId || "0", 10);
   const { loading: authLoading, isAuthenticated } = useAuth();
 
-  const [activeCategory, setActiveCategory] = useState("all");
   const [partyMode, setPartyMode] = useState<"existing" | "new">("existing");
   const [selectedPartyId, setSelectedPartyId] = useState<string>("");
   const [newPartyName, setNewPartyName] = useState("");
@@ -136,11 +129,6 @@ export default function Cashier() {
     }
   }, [unpaidOrders]);
 
-  const filteredItems = items?.filter((item: MenuItem) => {
-    if (activeCategory === "all") return true;
-    return item.categoryId === parseInt(activeCategory, 10);
-  }) || [];
-
   const isSubmitting = createPartyMutation.isPending || createOrderMutation.isPending;
   const isPaymentSubmitting = confirmPaymentBatchMutation.isPending;
   const partySizeNumber = parseInt(newPartySize, 10);
@@ -148,81 +136,6 @@ export default function Cashier() {
     partyMode === "existing" ? Boolean(selectedPartyId) : partySizeNumber > 0
   );
   const canConfirmPayment = selectedOrderIds.length > 0 && selectedPaymentMethod.length > 0;
-  const cartDetailContent = (
-    <div className="space-y-4">
-      {cart.length === 0 ? (
-        <div className="text-center py-6 text-muted-foreground">
-          カートは空です
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {cart.map((item) => (
-            <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-              <div className="flex-1 min-w-0">
-                <p className="font-medium line-clamp-1">{item.name}</p>
-                <p className="text-sm text-primary font-bold">
-                  ¥{(item.price * item.quantity).toLocaleString()}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="w-8 h-8 rounded-full"
-                  onClick={() => {
-                    if (item.quantity === 1) {
-                      removeFromCart(item.menuItemId);
-                    } else {
-                      updateQuantity(item.menuItemId, -1);
-                    }
-                  }}
-                >
-                  {item.quantity === 1 ? (
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  ) : (
-                    <Minus className="w-4 h-4" />
-                  )}
-                </Button>
-                <span className="w-8 text-center font-bold">{item.quantity}</span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="w-8 h-8 rounded-full"
-                  onClick={() => updateQuantity(item.menuItemId, 1)}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          <div className="pt-2 space-y-2">
-            <Label htmlFor="orderNotes">備考（任意）</Label>
-            <Textarea
-              id="orderNotes"
-              placeholder="アレルギーや特別なリクエストなど"
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="flex items-center justify-between pt-2 text-sm font-medium">
-            <span>小計</span>
-            <span>¥{totalAmount.toLocaleString()}</span>
-          </div>
-        </div>
-      )}
-
-      {cart.length > 0 && (
-        <Button variant="outline" className="w-full" onClick={clearCart}>
-          <Trash2 className="w-4 h-4 mr-2" />
-          カートをクリア
-        </Button>
-      )}
-    </div>
-  );
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
@@ -371,154 +284,43 @@ export default function Cashier() {
         </CardContent>
       </Card>
 
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle>カテゴリ</CardTitle>
-              <CardDescription>メニューを絞り込みます</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="w-full">
-                <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-                  <TabsList className="inline-flex h-auto p-1 bg-muted/50">
-                    <TabsTrigger
-                      value="all"
-                      className="rounded-full px-5 py-3 text-base sm:px-4 sm:py-2 sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-white"
-                    >
-                      すべて
-                    </TabsTrigger>
-                    {categories?.map((category: Category) => (
-                      <TabsTrigger
-                        key={category.id}
-                        value={category.id.toString()}
-                        className="rounded-full px-5 py-3 text-base sm:px-4 sm:py-2 sm:text-sm whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
-                      >
-                        {category.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4">
-            {filteredItems.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <UtensilsCrossed className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">メニューがありません</p>
-                </CardContent>
-              </Card>
-            ) : (
-              filteredItems.map((item: MenuItem) => {
-                const cartItem = cart.find((c) => c.menuItemId === item.id);
-                const inCart = !!cartItem;
-                const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
-
-                return (
-                  <Card
-                    key={item.id}
-                    className={`overflow-hidden transition-all duration-200 ${
-                      isSoldOut ? "opacity-60" : "hover:shadow-lg"
-                    } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="space-y-2 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-bold text-base line-clamp-2">{item.name}</h3>
-                            {inCart && (
-                              <Badge className="bg-primary text-white">
-                                {cartItem?.quantity}点
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-xl font-bold text-primary">
-                            ¥{Number(item.price).toLocaleString()}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {isSoldOut && <Badge variant="secondary">売切れ</Badge>}
-                            {!isSoldOut && item.stockCount !== null && (
-                              <Badge variant="outline" className="text-xs">
-                                残り{item.stockCount}
-                              </Badge>
-                            )}
-                            {!isSoldOut && item.stockCount === null && (
-                              <Badge variant="outline" className="text-xs">
-                                在庫あり
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end gap-3 min-w-[180px]">
-                          {inCart && !isSoldOut ? (
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="w-12 h-12 rounded-full"
-                                onClick={() => {
-                                  if (cartItem?.quantity === 1) {
-                                    removeFromCart(item.id);
-                                  } else {
-                                    updateQuantity(item.id, -1);
-                                  }
-                                }}
-                              >
-                                {cartItem?.quantity === 1 ? (
-                                  <Trash2 className="w-5 h-5 text-red-500" />
-                                ) : (
-                                  <Minus className="w-5 h-5" />
-                                )}
-                              </Button>
-                              <span className="w-10 text-center text-lg font-bold">
-                                {cartItem?.quantity}
-                              </span>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="w-12 h-12 rounded-full"
-                                onClick={() => updateQuantity(item.id, 1)}
-                              >
-                                <Plus className="w-5 h-5" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <Button
-                              size="lg"
-                              className="h-12 min-h-[44px] px-6 rounded-xl"
-                              onClick={() => addToCart(item)}
-                              disabled={isSoldOut}
-                            >
-                              <Plus className="w-5 h-5 mr-2" />
-                              追加
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4">
+      <CartBuilder
+        categories={categories as Category[] | undefined}
+        items={items as MenuItem[] | undefined}
+        cart={cart}
+        totalAmount={totalAmount}
+        totalItems={totalItems}
+        notes={notes}
+        onNotesChange={setNotes}
+        onAddToCart={addToCart}
+        onUpdateQuantity={updateQuantity}
+        onRemoveFromCart={removeFromCart}
+        onClearCart={clearCart}
+        sidebarHeader={(
           <Card>
             <CardHeader>
               <CardTitle>注文先</CardTitle>
               <CardDescription>誰の注文として登録しますか</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Tabs value={partyMode} onValueChange={(value) => setPartyMode(value as "existing" | "new")}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="existing">既存受付</TabsTrigger>
-                  <TabsTrigger value="new">新規受付</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <ScrollArea>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={partyMode === "existing" ? "default" : "outline"}
+                    onClick={() => setPartyMode("existing")}
+                  >
+                    既存受付
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={partyMode === "new" ? "default" : "outline"}
+                    onClick={() => setPartyMode("new")}
+                  >
+                    新規受付
+                  </Button>
+                </div>
+              </ScrollArea>
 
               {partyMode === "existing" ? (
                 <div className="space-y-2">
@@ -566,18 +368,8 @@ export default function Cashier() {
               )}
             </CardContent>
           </Card>
-
-          <Card className="hidden lg:block">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5" />
-                カート
-              </CardTitle>
-              <CardDescription>注文内容を確認できます</CardDescription>
-            </CardHeader>
-            <CardContent>{cartDetailContent}</CardContent>
-          </Card>
-
+        )}
+        sidebarFooter={(
           <Card>
             <CardHeader>
               <CardTitle>会計対象</CardTitle>
@@ -690,8 +482,8 @@ export default function Cashier() {
               </Button>
             </CardContent>
           </Card>
-        </div>
-      </div>
+        )}
+      />
 
       <Sheet>
         <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
@@ -730,7 +522,15 @@ export default function Cashier() {
             <SheetDescription>注文内容を確認できます</SheetDescription>
           </SheetHeader>
           <ScrollArea className="flex-1 px-4">
-            {cartDetailContent}
+            <CartDetailContent
+              cart={cart}
+              notes={notes}
+              totalAmount={totalAmount}
+              onNotesChange={setNotes}
+              onUpdateQuantity={updateQuantity}
+              onRemoveFromCart={removeFromCart}
+              onClearCart={clearCart}
+            />
           </ScrollArea>
         </SheetContent>
       </Sheet>

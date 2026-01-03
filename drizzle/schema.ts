@@ -273,6 +273,9 @@ export const orders = mysqlTable("orders", {
   notes: text("notes"),
   // 事前注文か着席後注文か
   orderType: mysqlEnum("orderType", ["preorder", "dine_in"]).default("preorder"),
+  // キッチン導線/受付経路
+  routeToKitchen: boolean("routeToKitchen").default(true).notNull(),
+  entrySource: varchar("entrySource", { length: 32 }),
   // 支払い情報
   paymentStatus: mysqlEnum("paymentStatus", ["unpaid", "paid", "voided"]).default("unpaid").notNull(),
   paymentMethod: varchar("paymentMethod", { length: 50 }),
