@@ -70,6 +70,7 @@ export const menuRouter = router({
       price: z.string().optional(),
       imageUrl: z.string().optional(),
       allergens: z.any().optional(),
+      categoryId: z.number().optional(),
       isAvailable: z.boolean().optional(),
       stockCount: z.number().optional(),
       prepTimeMinutes: z.number().optional(),

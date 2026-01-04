@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MenuImage } from "@/components/MenuImage";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
 import { trpc } from "@/lib/trpc";
 import { 
@@ -14,7 +15,6 @@ import {
   Plus,
   Minus,
   CheckCircle,
-  ImageIcon,
   ChefHat,
   Clock,
   Trash2,
@@ -286,18 +286,14 @@ export default function GuestMenu() {
                   <CardContent className="p-0">
                     <div className="flex">
                       {/* 画像 */}
-                      <div className="w-28 h-28 bg-muted flex-shrink-0 relative">
-                        {item.imageUrl ? (
-                          <img 
-                            src={item.imageUrl} 
-                            alt={item.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <ImageIcon className="w-10 h-10 text-muted-foreground/50" />
-                          </div>
-                        )}
+                      <div className="w-28 h-28 flex-shrink-0 relative">
+                        <MenuImage
+                          imageUrl={item.imageUrl}
+                          name={item.name}
+                          className="h-full w-full"
+                          iconClassName="h-10 w-10"
+                          labelClassName="text-sm"
+                        />
                         {isSoldOut && (
                           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                             <Badge variant="secondary" className="bg-white">売切れ</Badge>
@@ -383,18 +379,14 @@ export default function GuestMenu() {
           {selectedItem && (
             <>
               {/* 画像 */}
-              <div className="w-full h-48 bg-muted relative">
-                {selectedItem.imageUrl ? (
-                  <img 
-                    src={selectedItem.imageUrl} 
-                    alt={selectedItem.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <ImageIcon className="w-16 h-16 text-muted-foreground/50" />
-                  </div>
-                )}
+              <div className="w-full h-48 relative">
+                <MenuImage
+                  imageUrl={selectedItem.imageUrl}
+                  name={selectedItem.name}
+                  className="h-full w-full rounded-none"
+                  iconClassName="h-16 w-16"
+                  labelClassName="text-lg"
+                />
                 <Button
                   variant="ghost"
                   size="icon"
@@ -485,18 +477,14 @@ export default function GuestMenu() {
                 {cart.map(item => (
                   <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
                     {/* サムネイル */}
-                    <div className="w-16 h-16 bg-muted rounded-lg flex-shrink-0 overflow-hidden">
-                      {item.imageUrl ? (
-                        <img 
-                          src={item.imageUrl} 
-                          alt={item.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-muted-foreground/50" />
-                        </div>
-                      )}
+                    <div className="w-16 h-16 flex-shrink-0 overflow-hidden rounded-lg">
+                      <MenuImage
+                        imageUrl={item.imageUrl}
+                        name={item.name}
+                        className="h-full w-full"
+                        iconClassName="h-6 w-6"
+                        labelClassName="text-xs"
+                      />
                     </div>
 
                     {/* 情報 */}

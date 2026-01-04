@@ -8,16 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { MenuImage } from "@/components/MenuImage";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { 
   ArrowLeft,
   Loader2,
   Plus,
-  Trash2,
   Edit,
-  ChefHat,
-  ImageIcon
+  ChefHat
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -57,9 +56,27 @@ export default function MenuManagement() {
   const normalizedImageUrl = itemImageUrl.trim();
   const isImageUrlValid = normalizedImageUrl.length > 0 && isValidUrl(normalizedImageUrl);
 
+  // Edit item form
+  const [isEditItemOpen, setIsEditItemOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemDescription, setEditItemDescription] = useState("");
+  const [editItemPrice, setEditItemPrice] = useState("");
+  const [editItemCategoryId, setEditItemCategoryId] = useState("");
+  const [editItemPrepTime, setEditItemPrepTime] = useState("10");
+  const [editItemImageUrl, setEditItemImageUrl] = useState("");
+  const [editItemImagePreviewError, setEditItemImagePreviewError] = useState(false);
+  const [editItemAllergens, setEditItemAllergens] = useState("");
+  const normalizedEditImageUrl = editItemImageUrl.trim();
+  const isEditImageUrlValid = normalizedEditImageUrl.length > 0 && isValidUrl(normalizedEditImageUrl);
+
   useEffect(() => {
     setItemImagePreviewError(false);
   }, [itemImageUrl]);
+
+  useEffect(() => {
+    setEditItemImagePreviewError(false);
+  }, [editItemImageUrl]);
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -158,6 +175,59 @@ export default function MenuManagement() {
       id: itemId,
       storeId: storeIdNum,
       isAvailable,
+    });
+  };
+
+  const openEditItemDialog = (item: {
+    id: number;
+    categoryId: number;
+    name: string;
+    description?: string | null;
+    price: number | string;
+    imageUrl?: string | null;
+    allergens?: string[] | null;
+    prepTimeMinutes?: number | null;
+  }) => {
+    setEditingItemId(item.id);
+    setEditItemCategoryId(String(item.categoryId));
+    setEditItemName(item.name);
+    setEditItemDescription(item.description ?? "");
+    setEditItemPrice(String(item.price));
+    setEditItemPrepTime(String(item.prepTimeMinutes ?? 10));
+    setEditItemImageUrl(item.imageUrl ?? "");
+    setEditItemAllergens(Array.isArray(item.allergens) ? item.allergens.join(", ") : "");
+    setIsEditItemOpen(true);
+    setEditItemImagePreviewError(false);
+  };
+
+  const handleUpdateItem = () => {
+    if (!editingItemId) return;
+    if (!editItemName.trim() || !editItemPrice || !editItemCategoryId) {
+      toast.error("必須項目を入力してください");
+      return;
+    }
+    if (normalizedEditImageUrl && !isValidUrl(normalizedEditImageUrl)) {
+      toast.error("画像URLの形式が正しくありません");
+      return;
+    }
+    updateItemMutation.mutate({
+      id: editingItemId,
+      storeId: storeIdNum,
+      categoryId: parseInt(editItemCategoryId),
+      name: editItemName,
+      description: editItemDescription || undefined,
+      price: editItemPrice,
+      imageUrl: normalizedEditImageUrl || undefined,
+      allergens: editItemAllergens
+        .split(",")
+        .map((allergen) => allergen.trim())
+        .filter(Boolean),
+      prepTimeMinutes: parseInt(editItemPrepTime),
+    }, {
+      onSuccess: () => {
+        setIsEditItemOpen(false);
+        setEditingItemId(null);
+      },
     });
   };
 
@@ -357,6 +427,118 @@ export default function MenuManagement() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            <Dialog open={isEditItemOpen} onOpenChange={(open) => {
+              setIsEditItemOpen(open);
+              if (!open) {
+                setEditingItemId(null);
+              }
+            }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>メニューを編集</DialogTitle>
+                  <DialogDescription>登録済みのメニュー情報を更新できます。</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>カテゴリ *</Label>
+                    <Select value={editItemCategoryId} onValueChange={setEditItemCategoryId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="選択してください" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories?.map(cat => (
+                          <SelectItem key={cat.id} value={String(cat.id)}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>メニュー名 *</Label>
+                    <Input
+                      placeholder="商品名"
+                      value={editItemName}
+                      onChange={(e) => setEditItemName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>説明</Label>
+                    <Textarea
+                      placeholder="商品の説明"
+                      value={editItemDescription}
+                      onChange={(e) => setEditItemDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>画像URL</Label>
+                    <Input
+                      placeholder="https://example.com/menu.jpg"
+                      value={editItemImageUrl}
+                      onChange={(e) => {
+                        setEditItemImageUrl(e.target.value);
+                        setEditItemImagePreviewError(false);
+                      }}
+                    />
+                    {normalizedEditImageUrl && !isEditImageUrlValid && (
+                      <p className="text-xs text-destructive">URL形式が正しくありません</p>
+                    )}
+                    {normalizedEditImageUrl && isEditImageUrlValid && (
+                      <div className="rounded-lg border bg-muted/30 p-2">
+                        {editItemImagePreviewError ? (
+                          <p className="text-xs text-muted-foreground">
+                            画像を読み込めませんでした
+                          </p>
+                        ) : (
+                          <img
+                            src={normalizedEditImageUrl}
+                            alt="プレビュー"
+                            className="max-h-40 w-full rounded-md object-cover"
+                            onError={() => setEditItemImagePreviewError(true)}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>アレルゲン（カンマ区切り）</Label>
+                    <Input
+                      placeholder="卵, 乳, 小麦"
+                      value={editItemAllergens}
+                      onChange={(e) => setEditItemAllergens(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>価格（税込）*</Label>
+                      <Input
+                        type="number"
+                        placeholder="500"
+                        value={editItemPrice}
+                        onChange={(e) => setEditItemPrice(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>調理時間（分）</Label>
+                      <Input
+                        type="number"
+                        value={editItemPrepTime}
+                        onChange={(e) => setEditItemPrepTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditItemOpen(false)}>
+                    キャンセル
+                  </Button>
+                  <Button onClick={handleUpdateItem} disabled={updateItemMutation.isPending}>
+                    {updateItemMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    更新
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </header>
@@ -425,16 +607,14 @@ export default function MenuManagement() {
                         className={`p-4 border rounded-lg ${!item.isAvailable ? 'opacity-50' : ''}`}
                       >
                         <div className="flex gap-4">
-                          <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
-                            {item.imageUrl ? (
-                              <img 
-                                src={item.imageUrl} 
-                                alt={item.name}
-                                className="w-full h-full object-cover rounded-lg"
-                              />
-                            ) : (
-                              <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                            )}
+                          <div className="w-20 h-20 flex-shrink-0">
+                            <MenuImage
+                              imageUrl={item.imageUrl}
+                              name={item.name}
+                              className="h-full w-full rounded-lg"
+                              iconClassName="h-8 w-8"
+                              labelClassName="text-xs"
+                            />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
@@ -444,10 +624,19 @@ export default function MenuManagement() {
                                   ¥{item.price.toLocaleString()}
                                 </p>
                               </div>
-                              <Switch
-                                checked={item.isAvailable ?? false}
-                                onCheckedChange={(checked) => handleToggleAvailability(item.id, checked)}
-                              />
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditItemDialog(item)}
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                                <Switch
+                                  checked={item.isAvailable ?? false}
+                                  onCheckedChange={(checked) => handleToggleAvailability(item.id, checked)}
+                                />
+                              </div>
                             </div>
                             {item.description && (
                               <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
