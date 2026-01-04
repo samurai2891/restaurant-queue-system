@@ -119,3 +119,10 @@
 - [x] Analytics.tsxのReactフックエラーを修正（useMemoを条件分岐の前に移動）
 - [x] データダウンロード/データ出力ページのルーティングを確認（正常に動作）
 - [x] App.tsxのルーティング設定を確認（/export/:storeIdで正しく設定済み）
+
+
+## Stripe課金設定（2026-01-04）
+- [x] ユーザー提供のStripe APIキーを設定
+- [x] Stripe製品・価格の作成（Free/Standard/Premium）
+- [x] Webhookエンドポイントの確認
+- [x] サブスクリプションプランAPIの動作確認

@@ -185,7 +185,7 @@ export default function MenuManagement() {
     description?: string | null;
     price: number | string;
     imageUrl?: string | null;
-    allergens?: string[] | null;
+    allergens?: unknown;
     prepTimeMinutes?: number | null;
   }) => {
     setEditingItemId(item.id);

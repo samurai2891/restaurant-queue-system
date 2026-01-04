@@ -1,10 +1,18 @@
 // Stripe製品・価格定義
-// 実際のStripeダッシュボードで作成した製品IDに置き換えてください
+// ユーザー提供のStripeアカウントで作成された製品ID
+
+// Stripe Price IDs（実際に作成されたもの）
+export const STRIPE_PRICE_IDS = {
+  free: 'price_1SllfORpCmDhhjB3VEYWSUXR',
+  standard: 'price_1SllfPRpCmDhhjB3v2m4qkeJ',
+  premium: 'price_1SllfQRpCmDhhjB30cOFk4WB',
+} as const;
 
 export const SUBSCRIPTION_PLANS = {
   free: {
     name: "フリープラン",
     description: "基本機能を無料でご利用いただけます",
+    priceId: STRIPE_PRICE_IDS.free,
     price: 0,
     features: [
       "1店舗まで",
@@ -24,7 +32,7 @@ export const SUBSCRIPTION_PLANS = {
   standard: {
     name: "スタンダードプラン",
     description: "中小規模店舗向けの充実した機能",
-    priceId: process.env.STRIPE_STANDARD_PRICE_ID || "price_standard",
+    priceId: STRIPE_PRICE_IDS.standard,
     price: 4980,
     features: [
       "3店舗まで",
@@ -46,8 +54,8 @@ export const SUBSCRIPTION_PLANS = {
   premium: {
     name: "プレミアムプラン",
     description: "大規模店舗・チェーン向けのフル機能",
-    priceId: process.env.STRIPE_PREMIUM_PRICE_ID || "price_premium",
-    price: 14980,
+    priceId: STRIPE_PRICE_IDS.premium,
+    price: 9980,
     features: [
       "無制限の店舗数",
       "無制限の受付数",
