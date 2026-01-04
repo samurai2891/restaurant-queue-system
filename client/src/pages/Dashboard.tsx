@@ -122,9 +122,9 @@ export default function Dashboard() {
       <main className="container py-8">
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">ダッシュボード</h1>
+          <h1 className="text-3xl font-bold mb-2">管理者ダッシュボード</h1>
           <p className="text-muted-foreground">
-            店舗を選択して管理を開始してください
+            管理者専用の入口です。店舗を選択して設定や運用画面へ進んでください。
           </p>
         </div>
 
@@ -226,51 +226,61 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="space-y-4 p-4">
                   <div className="rounded-lg border bg-background/60 p-3 text-xs text-muted-foreground">
-                    店舗ごとの主要導線をPOSカードでまとめています。
+                    管理者導線とスタッフ導線を分けて整理しています。
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Link href={`/cashier/${store.id}`}>
-                      <Button className="w-full justify-start gap-2">
-                        <CreditCard className="w-4 h-4" />
-                        レジ
-                      </Button>
-                    </Link>
-                    <Link href={`/queue/${store.id}`}>
-                      <Button variant="outline" className="w-full justify-start gap-2">
-                        <Users className="w-4 h-4" />
-                        キュー管理
-                      </Button>
-                    </Link>
-                    <Link href={`/kitchen/${store.id}`}>
-                      <Button variant="outline" className="w-full justify-start gap-2">
-                        <ChefHat className="w-4 h-4" />
-                        キッチン
-                      </Button>
-                    </Link>
-                    <Link href={`/menu/${store.id}`}>
-                      <Button variant="outline" className="w-full justify-start gap-2">
-                        <Utensils className="w-4 h-4" />
-                        メニュー管理
-                      </Button>
-                    </Link>
-                    <Link href={`/analytics/${store.id}`}>
-                      <Button variant="outline" className="w-full justify-start gap-2">
-                        <BarChart3 className="w-4 h-4" />
-                        分析
-                      </Button>
-                    </Link>
-                    <Link href={`/settings/${store.id}`}>
-                      <Button variant="outline" className="w-full justify-start gap-2">
-                        <Settings className="w-4 h-4" />
-                        設定
-                      </Button>
-                    </Link>
-                    <Link href={`/export/${store.id}`} className="col-span-2">
-                      <Button variant="outline" className="w-full justify-start gap-2">
-                        <Download className="w-4 h-4" />
-                        データ出力
-                      </Button>
-                    </Link>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground">スタッフ導線</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Link href={`/cashier/${store.id}`}>
+                          <Button className="w-full justify-start gap-2">
+                            <CreditCard className="w-4 h-4" />
+                            レジ
+                          </Button>
+                        </Link>
+                        <Link href={`/queue/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <Users className="w-4 h-4" />
+                            キュー管理
+                          </Button>
+                        </Link>
+                        <Link href={`/kitchen/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <ChefHat className="w-4 h-4" />
+                            キッチン
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground">管理者導線</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <Link href={`/menu/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <Utensils className="w-4 h-4" />
+                            メニュー管理
+                          </Button>
+                        </Link>
+                        <Link href={`/analytics/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <BarChart3 className="w-4 h-4" />
+                            分析
+                          </Button>
+                        </Link>
+                        <Link href={`/settings/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <Settings className="w-4 h-4" />
+                            設定
+                          </Button>
+                        </Link>
+                        <Link href={`/export/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <Download className="w-4 h-4" />
+                            データ出力
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

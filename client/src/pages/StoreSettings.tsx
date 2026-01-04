@@ -191,7 +191,7 @@ export default function StoreSettings() {
       <header className="sticky top-0 z-50 glass border-b">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard">
+            <Link href="/admin">
               <Button variant="ghost" size="icon">
                 <ArrowLeft className="w-4 h-4" />
               </Button>

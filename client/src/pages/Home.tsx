@@ -105,23 +105,29 @@ export default function Home() {
             <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               会社概要
             </Link>
+            <Link href="/guest" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              ゲスト入口
+            </Link>
+            <Link href="/staff" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              スタッフ入口
+            </Link>
           </nav>
 
           <div className="flex items-center gap-3">
             {loading ? (
               <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
             ) : isAuthenticated ? (
-              <Link href="/dashboard">
-                <Button>ダッシュボード</Button>
+              <Link href="/admin">
+                <Button>管理者ダッシュボード</Button>
               </Link>
             ) : (
               <>
                 <a href={getLoginUrl()}>
-                  <Button variant="ghost">ログイン</Button>
+                  <Button variant="ghost">スタッフ/管理者ログイン</Button>
                 </a>
-                <a href={getLoginUrl()}>
-                  <Button>無料で始める</Button>
-                </a>
+                <Link href="/guest">
+                  <Button variant="outline">ゲスト入口</Button>
+                </Link>
               </>
             )}
           </div>
@@ -147,9 +153,9 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               {isAuthenticated ? (
-                <Link href="/dashboard">
+                <Link href="/admin">
                   <Button size="lg" className="gap-2">
-                    ダッシュボードへ
+                    管理者ダッシュボードへ
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
@@ -157,13 +163,13 @@ export default function Home() {
                 <>
                   <a href={getLoginUrl()}>
                     <Button size="lg" className="gap-2">
-                      無料で始める
+                      スタッフ/管理者ログイン
                       <ArrowRight className="w-4 h-4" />
                     </Button>
                   </a>
-                  <Link href="#features">
+                  <Link href="/guest">
                     <Button size="lg" variant="outline">
-                      機能を見る
+                      ゲスト入口
                     </Button>
                   </Link>
                 </>
@@ -339,19 +345,27 @@ export default function Home() {
               クレジットカード不要、いつでもキャンセル可能。
             </p>
             {isAuthenticated ? (
-              <Link href="/dashboard">
+              <Link href="/admin">
                 <Button size="lg" variant="secondary" className="gap-2">
-                  ダッシュボードへ
+                  管理者ダッシュボードへ
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
             ) : (
-              <a href={getLoginUrl()}>
-                <Button size="lg" variant="secondary" className="gap-2">
-                  無料トライアルを始める
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </a>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <a href={getLoginUrl()}>
+                  <Button size="lg" variant="secondary" className="gap-2">
+                    スタッフ/管理者ログイン
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </a>
+                <Link href="/guest">
+                  <Button size="lg" variant="outline" className="gap-2">
+                    ゲスト入口
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              </div>
             )}
           </div>
         </div>
