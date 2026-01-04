@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { MenuImage } from "@/components/MenuImage";
 import type { CartItem, MenuItem } from "@/hooks/useMenuCart";
 import { Minus, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -260,18 +261,13 @@ export const CartBuilder = ({
                   <CardContent className="p-4">
                     <div className="flex flex-col gap-3">
                       <div className="h-32 w-full overflow-hidden rounded-lg bg-muted/40">
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
-                            画像なし
-                          </div>
-                        )}
+                        <MenuImage
+                          imageUrl={item.imageUrl}
+                          name={item.name}
+                          className="h-full w-full"
+                          iconClassName="h-10 w-10"
+                          labelClassName="text-sm"
+                        />
                       </div>
                       <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
