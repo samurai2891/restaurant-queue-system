@@ -16,6 +16,8 @@ import DataExport from "./pages/DataExport";
 import GuestRegister from "./pages/GuestRegister";
 import GuestStatus from "./pages/GuestStatus";
 import GuestMenu from "./pages/GuestMenu";
+import GuestEntry from "./pages/GuestEntry";
+import StaffEntry from "./pages/StaffEntry";
 import Cashier from "./pages/Cashier";
 import Register from "./pages/Register";
 import About from "./pages/About";
@@ -30,64 +32,69 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       
       {/* ゲスト用ページ（インストール不要） */}
+      <Route path="/guest" component={GuestEntry} />
       <Route path="/guest/register/:storeId" component={GuestRegister} />
       <Route path="/guest/status/:accessToken" component={GuestStatus} />
       <Route path="/guest/menu/:accessToken" component={GuestMenu} />
       
-      {/* 管理者用ページ */}
+      {/* スタッフ用ページ */}
+      <Route path="/staff" component={StaffEntry} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/admin" component={Dashboard} />
       <Route path="/queue/:storeId">
         {() => (
-          <DashboardLayout>
+          <DashboardLayout variant="staff">
             <QueueManagement />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/settings/:storeId">
-        {() => (
-          <DashboardLayout>
-            <StoreSettings />
-          </DashboardLayout>
-        )}
-      </Route>
-      <Route path="/menu/:storeId">
-        {() => (
-          <DashboardLayout>
-            <MenuManagement />
           </DashboardLayout>
         )}
       </Route>
       <Route path="/cashier/:storeId">
         {() => (
-          <DashboardLayout>
+          <DashboardLayout variant="staff">
             <Cashier />
           </DashboardLayout>
         )}
       </Route>
       <Route path="/register/:storeId">
         {() => (
-          <DashboardLayout>
+          <DashboardLayout variant="staff">
             <Register />
           </DashboardLayout>
         )}
       </Route>
       <Route path="/kitchen/:storeId">
         {() => (
-          <DashboardLayout>
+          <DashboardLayout variant="staff">
             <KitchenDisplay />
+          </DashboardLayout>
+        )}
+      </Route>
+      
+      {/* 管理者用ページ */}
+      <Route path="/settings/:storeId">
+        {() => (
+          <DashboardLayout variant="admin">
+            <StoreSettings />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/menu/:storeId">
+        {() => (
+          <DashboardLayout variant="admin">
+            <MenuManagement />
           </DashboardLayout>
         )}
       </Route>
       <Route path="/analytics/:storeId">
         {() => (
-          <DashboardLayout>
+          <DashboardLayout variant="admin">
             <Analytics />
           </DashboardLayout>
         )}
       </Route>
       <Route path="/export/:storeId">
         {() => (
-          <DashboardLayout>
+          <DashboardLayout variant="admin">
             <DataExport />
           </DashboardLayout>
         )}

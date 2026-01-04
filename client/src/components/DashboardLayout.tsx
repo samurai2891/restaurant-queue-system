@@ -10,6 +10,9 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -31,11 +34,12 @@ import {
   PanelLeft,
   Settings,
   ShoppingCart,
+  Store,
   UtensilsCrossed,
 } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -43,11 +47,17 @@ const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 
+type DashboardLayoutVariant = "staff" | "admin";
+
+type DashboardLayoutProps = {
+  children: React.ReactNode;
+  variant?: DashboardLayoutVariant;
+};
+
 export default function DashboardLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+  variant = "staff",
+}: DashboardLayoutProps) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
@@ -96,7 +106,10 @@ export default function DashboardLayout({
         } as CSSProperties
       }
     >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+      <DashboardLayoutContent
+        setSidebarWidth={setSidebarWidth}
+        variant={variant}
+      >
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
@@ -106,11 +119,13 @@ export default function DashboardLayout({
 type DashboardLayoutContentProps = {
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
+  variant: DashboardLayoutVariant;
 };
 
 function DashboardLayoutContent({
   children,
   setSidebarWidth,
+  variant,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -124,55 +139,83 @@ function DashboardLayoutContent({
   );
   const storeId = storeIdMatch?.[2];
 
-  const menuItems = [
-    {
-      icon: CreditCard,
-      label: "レジ",
-      path: storeId ? `/register/${storeId}` : "/register",
-    },
-    {
-      icon: ClipboardList,
-      label: "キュー管理",
-      path: storeId ? `/queue/${storeId}` : "/queue",
-    },
-    {
-      icon: UtensilsCrossed,
-      label: "メニュー管理",
-      path: storeId ? `/menu/${storeId}` : "/menu",
-    },
-    {
-      icon: ShoppingCart,
-      label: "注文受付",
-      path: storeId ? `/cashier/${storeId}` : "/cashier",
-    },
-    {
-      icon: ChefHat,
-      label: "キッチン",
-      path: storeId ? `/kitchen/${storeId}` : "/kitchen",
-    },
-    {
-      icon: BarChart3,
-      label: "分析",
-      path: storeId ? `/analytics/${storeId}` : "/analytics",
-    },
-    {
-      icon: Download,
-      label: "データダウンロード",
-      path: storeId ? `/data/${storeId}` : "/data",
-    },
-    {
-      icon: Settings,
-      label: "設定",
-      path: storeId ? `/settings/${storeId}` : "/settings",
-    },
-    {
-      icon: Download,
-      label: "データ出力",
-      path: storeId ? `/export/${storeId}` : "/export",
-    },
-  ];
+  const menuGroups = useMemo(() => {
+    const staffItems = [
+      {
+        icon: CreditCard,
+        label: "レジ",
+        path: storeId ? `/register/${storeId}` : "/register",
+      },
+      {
+        icon: ClipboardList,
+        label: "キュー管理",
+        path: storeId ? `/queue/${storeId}` : "/queue",
+      },
+      {
+        icon: ShoppingCart,
+        label: "注文受付",
+        path: storeId ? `/cashier/${storeId}` : "/cashier",
+      },
+      {
+        icon: ChefHat,
+        label: "キッチン",
+        path: storeId ? `/kitchen/${storeId}` : "/kitchen",
+      },
+    ];
 
-  const activeMenuItem = menuItems.find(item => item.path === location);
+    const adminItems = [
+      {
+        icon: UtensilsCrossed,
+        label: "メニュー管理",
+        path: storeId ? `/menu/${storeId}` : "/menu",
+      },
+      {
+        icon: BarChart3,
+        label: "分析",
+        path: storeId ? `/analytics/${storeId}` : "/analytics",
+      },
+      {
+        icon: Settings,
+        label: "設定",
+        path: storeId ? `/settings/${storeId}` : "/settings",
+      },
+      {
+        icon: Download,
+        label: "データ出力",
+        path: storeId ? `/export/${storeId}` : "/export",
+      },
+    ];
+
+    if (variant === "admin") {
+      return [
+        {
+          label: "管理者ホーム",
+          items: [
+            {
+              icon: Store,
+              label: "店舗一覧",
+              path: "/dashboard",
+            },
+          ],
+        },
+        {
+          label: "管理者メニュー",
+          items: adminItems,
+        },
+      ];
+    }
+
+    return [
+      {
+        label: "スタッフメニュー",
+        items: staffItems,
+      },
+    ];
+  }, [storeId, variant]);
+
+  const activeMenuItem = menuGroups
+    .flatMap(group => group.items)
+    .find(item => item.path === location);
 
   useEffect(() => {
     if (isCollapsed) {
@@ -237,27 +280,36 @@ function DashboardLayoutContent({
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
-                const isActive = location === item.path;
-                return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
-                    >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
+          <SidebarContent className="gap-2">
+            {menuGroups.map(group => (
+              <SidebarGroup key={group.label} className="py-1">
+                <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu className="px-2 py-1">
+                    {group.items.map(item => {
+                      const isActive = location === item.path;
+                      return (
+                        <SidebarMenuItem key={item.path}>
+                          <SidebarMenuButton
+                            isActive={isActive}
+                            onClick={() => setLocation(item.path)}
+                            tooltip={item.label}
+                            className="h-10 transition-all font-normal"
+                          >
+                            <item.icon
+                              className={`h-4 w-4 ${
+                                isActive ? "text-primary" : ""
+                              }`}
+                            />
+                            <span>{item.label}</span>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
           </SidebarContent>
 
           <SidebarFooter className="p-3">

@@ -75,11 +75,11 @@ export default function Pricing() {
 
           <div className="flex items-center gap-4">
             {isAuthenticated ? (
-              <Link href="/dashboard">
+              <Link href="/admin">
                 <Button>ダッシュボード</Button>
               </Link>
             ) : (
-              <Link href="/dashboard">
+              <Link href="/admin">
                 <Button>無料で始める</Button>
               </Link>
             )}
@@ -207,7 +207,7 @@ export default function Pricing() {
           <p className="text-muted-foreground mb-6">
             クレジットカード不要で今すぐ始められます
           </p>
-          <Link href="/dashboard">
+          <Link href="/admin">
             <Button size="lg">
               無料で始める
               <ArrowRight className="w-4 h-4 ml-2" />
