@@ -24,6 +24,7 @@ export const publicStoreRouter = router({
         isReceptionPaused: store.isReceptionPaused,
         businessHours: store.businessHours,
         receptionHours: store.receptionHours,
+        enablePosV2UI: store.enablePosV2UI,
       };
     }),
 

@@ -126,3 +126,9 @@
 - [x] Stripe製品・価格の作成（Free/Standard/Premium）
 - [x] Webhookエンドポイントの確認
 - [x] サブスクリプションプランAPIの動作確認
+
+
+## バグ修正（2026-01-06）
+- [x] /adminページで発生していた「Unexpected token '<', "<!doctype "... is not valid JSON」エラーを修正（サーバー再起動中の一時的なエラーであることを確認）
+- [x] TypeScript型エラーを修正（PartyRow型定義、publicStore.getにenablePosV2UI追加、db.tsのor関数型エラー、ticket.tsのnull値処理）
+- [x] 全TypeScriptエラーを解消し、APIエンドポイントが正しく動作することを確認

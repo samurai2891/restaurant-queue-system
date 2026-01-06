@@ -400,7 +400,8 @@ export async function getTicketsByStoreId(
     if (Number.isFinite(numeric)) {
       searchConditions.push(eq(parties.ticketNumber, numeric));
     }
-    conditions.push(or(...searchConditions));
+    const searchOr = or(...searchConditions);
+    if (searchOr) conditions.push(searchOr);
   }
 
   const ticketRows = await db

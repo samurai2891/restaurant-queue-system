@@ -139,13 +139,14 @@ export const ticketRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "会計中のため編集できません" });
       }
 
-      await db.updateParty(input.ticketId, {
-        ...(input.tableLabel !== undefined ? { tableLabel: input.tableLabel } : {}),
-        ...(input.partySize !== undefined ? { partySize: input.partySize } : {}),
-        ...(input.guestName !== undefined ? { guestName: input.guestName } : {}),
-        ...(input.memoText !== undefined ? { memoText: input.memoText } : {}),
-        ...(input.memoImageUrl !== undefined ? { memoImageUrl: input.memoImageUrl } : {}),
-      });
+      const updates: Record<string, string | number | null> = {};
+      if (input.tableLabel !== undefined) updates.tableLabel = input.tableLabel;
+      if (input.partySize !== undefined && input.partySize !== null) updates.partySize = input.partySize;
+      if (input.guestName !== undefined) updates.guestName = input.guestName;
+      if (input.memoText !== undefined) updates.memoText = input.memoText;
+      if (input.memoImageUrl !== undefined) updates.memoImageUrl = input.memoImageUrl;
+
+      await db.updateParty(input.ticketId, updates);
 
       return { success: true };
     }),
