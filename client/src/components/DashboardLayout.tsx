@@ -174,16 +174,16 @@ function DashboardLayoutContent({
         label: "分析",
         path: storeId ? `/analytics/${storeId}` : "/analytics",
       },
-      {
+      ...(storeId ? [{
         icon: Settings,
         label: "設定",
-        path: storeId ? `/settings/${storeId}` : "/settings",
-      },
-      {
+        path: `/settings/${storeId}`,
+      }] : []),
+      ...(storeId ? [{
         icon: Download,
         label: "データ出力",
-        path: storeId ? `/export/${storeId}` : "/export",
-      },
+        path: `/export/${storeId}`,
+      }] : []),
     ];
 
     if (variant === "admin") {

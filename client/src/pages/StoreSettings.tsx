@@ -178,6 +178,25 @@ export default function StoreSettings() {
     });
   };
 
+  // storeIdがNaNの場合は管理者ダッシュボードにリダイレクト
+  if (isNaN(storeIdNum) || storeIdNum <= 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>店舗が見つかりません</CardTitle>
+            <CardDescription>有効な店舗IDが指定されていません</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/admin">
+              <Button className="w-full">管理者ダッシュボードへ</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (authLoading || storeLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">

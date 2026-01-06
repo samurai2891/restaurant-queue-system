@@ -132,3 +132,10 @@
 - [x] /adminページで発生していた「Unexpected token '<', "<!doctype "... is not valid JSON」エラーを修正（サーバー再起動中の一時的なエラーであることを確認）
 - [x] TypeScript型エラーを修正（PartyRow型定義、publicStore.getにenablePosV2UI追加、db.tsのor関数型エラー、ticket.tsのnull値処理）
 - [x] 全TypeScriptエラーを解消し、APIエンドポイントが正しく動作することを確認
+
+
+## バグ修正（2026-01-06 - NaNエラー）
+- [x] /settings/NaNページで発生していた「Invalid input: expected number, received NaN」エラーを修正
+- [x] URLパラメータのstoreIdが正しく解析されない原因を特定（DashboardLayoutの正規表現マッチング問題）
+- [x] StoreSettingsコンポーネントでNaN値のバリデーションを追加（早期リターンとエラーメッセージ表示）
+- [x] DashboardLayoutでstoreIdがない場合のナビゲーションリンクを非表示に修正
