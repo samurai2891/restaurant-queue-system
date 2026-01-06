@@ -116,6 +116,27 @@ export default function GuestRegister() {
     );
   }
 
+  if (store.enablePosV2UI) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>オンライン受付は利用できません</CardTitle>
+            <CardDescription>{store.name}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              この店舗では、スタッフから案内されたアクセスコード（QR）から注文を行います。
+            </p>
+            <Button className="w-full" size="lg" onClick={() => setLocation("/guest")}>
+              ゲスト入口へ戻る
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (store.isReceptionPaused) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-primary/10 p-4">

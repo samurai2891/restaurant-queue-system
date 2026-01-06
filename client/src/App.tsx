@@ -20,6 +20,10 @@ import GuestEntry from "./pages/GuestEntry";
 import StaffEntry from "./pages/StaffEntry";
 import Cashier from "./pages/Cashier";
 import Register from "./pages/Register";
+import PosTicketList from "./pages/PosTicketList";
+import PosTicketEditor from "./pages/PosTicketEditor";
+import PosPayment from "./pages/PosPayment";
+import HandheldOrder from "./pages/HandheldOrder";
 import About from "./pages/About";
 import Pricing from "./pages/Pricing";
 
@@ -62,6 +66,12 @@ function Router() {
           </DashboardLayout>
         )}
       </Route>
+      {/* POS vNext (Airレジ型) */}
+      <Route path="/pos/:storeId/tickets" component={PosTicketList} />
+      <Route path="/pos/:storeId/tickets/:ticketId/edit" component={PosTicketEditor} />
+      <Route path="/pos/:storeId/tickets/:ticketId/pay" component={PosPayment} />
+      {/* Handheld (対面注文) */}
+      <Route path="/handheld/:storeId" component={HandheldOrder} />
       <Route path="/kitchen/:storeId">
         {() => (
           <DashboardLayout variant="staff">

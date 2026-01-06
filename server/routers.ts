@@ -12,6 +12,8 @@ import { seatTypeRouter } from "./routers/seatType";
 import { staffRouter } from "./routers/staff";
 import { storeRouter } from "./routers/store";
 import { subscriptionRouter } from "./routers/subscription";
+import { ticketRouter } from "./routers/ticket";
+import { paymentRouter } from "./routers/payment";
 
 // ============================================
 // Main Router
@@ -23,6 +25,8 @@ export const appRouter = router({
   staff: staffRouter,
   seatType: { ...seatTypeRouter, listPublic: publicStoreRouter.seatTypes },
   party: partyRouter,
+  ticket: ticketRouter,
+  payment: paymentRouter,
   notification: notificationRouter,
   menu: { ...menuRouter, guestCategories: menuRouter.categories, guestItems: menuRouter.items },
   order: { ...orderRouter, guestCreate: orderRouter.create, kitchen: orderRouter.list },

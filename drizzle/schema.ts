@@ -55,6 +55,11 @@ export const stores = mysqlTable("stores", {
   // 自動通知ルール
   autoNotifyRank: int("autoNotifyRank").default(0), // 上位N組に自動通知
   autoNotifyMinutes: int("autoNotifyMinutes").default(0), // 残りT分以内に自動通知
+  // Feature Flags (段階導入)
+  enablePosV2UI: boolean("enablePosV2UI").default(false).notNull(),
+  enableHandheld: boolean("enableHandheld").default(false).notNull(),
+  enableMemoTicket: boolean("enableMemoTicket").default(false).notNull(),
+  enableDraftHandoff: boolean("enableDraftHandoff").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -69,7 +74,7 @@ export const storeStaff = mysqlTable("store_staff", {
   id: int("id").autoincrement().primaryKey(),
   storeId: int("storeId").notNull(),
   userId: int("userId").notNull(),
-  role: mysqlEnum("role", ["owner", "manager", "host", "staff", "kitchen"]).default("staff").notNull(),
+  role: mysqlEnum("role", ["owner", "manager", "cashier", "host", "staff", "kitchen"]).default("staff").notNull(),
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -122,6 +127,14 @@ export const parties = mysqlTable("parties", {
   assignedSeatTypeId: int("assignedSeatTypeId"),
   // 状態
   status: mysqlEnum("status", ["waiting", "notified", "arrived", "seated", "canceled", "noshow"]).default("waiting").notNull(),
+  // POS用の種別/状態（待ち行列のstatusとは別軸）
+  partyKind: mysqlEnum("partyKind", ["DINE_IN", "COUNTER_SALE", "MEMO_ONLY"]).default("DINE_IN").notNull(),
+  posStatus: mysqlEnum("posStatus", ["OPEN", "MEMO_ONLY", "ITEMIZED", "PAYMENT_LOCKED", "PAID", "VOID"]).default("OPEN").notNull(),
+  tableLabel: varchar("tableLabel", { length: 50 }),
+  memoText: text("memoText"),
+  memoImageUrl: text("memoImageUrl"),
+  paymentLockedAt: timestamp("paymentLockedAt"),
+  paymentLockedByStaffId: int("paymentLockedByStaffId"),
   // 優先度（VIP対応など）
   priority: int("priority").default(0),
   // 備考
@@ -143,6 +156,25 @@ export const parties = mysqlTable("parties", {
 
 export type Party = typeof parties.$inferSelect;
 export type InsertParty = typeof parties.$inferInsert;
+
+// ============================================
+// Audit Log (監査ログ)
+// ============================================
+export const auditLogs = mysqlTable("audit_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  storeId: int("storeId").notNull(),
+  userId: int("userId"),
+  action: varchar("action", { length: 100 }).notNull(),
+  targetType: varchar("targetType", { length: 50 }),
+  targetId: int("targetId"),
+  details: json("details"),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
 // ============================================
 // Notification (通知)

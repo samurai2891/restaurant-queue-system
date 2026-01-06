@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+
+// Stripe初期化（ENV未設定）でテストが落ちるのを防ぐ
+vi.mock("./stripe/stripe", () => ({
+  createCheckoutSession: vi.fn(),
+  createPortalSession: vi.fn(),
+  stripe: {},
+}));
 
 type CookieCall = {
   name: string;

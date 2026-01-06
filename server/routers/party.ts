@@ -1,8 +1,16 @@
-import { z } from "zod";
+import { z, TRPCError } from "../_core/deps";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
-import { TRPCError } from "@trpc/server";
 import * as db from "../db";
 import { checkStoreAccess, isOrderReleaseAllowed } from "./helpers";
+
+type AuthedCtx = { user: { id: number } };
+type ProtectedOpts<TInput> = { ctx: AuthedCtx; input: TInput };
+type PublicOpts<TInput> = { input: TInput };
+type SeatTypeRow = { id: number };
+type PartyRow = {
+  preferredSeatTypeId?: number | null;
+  assignedSeatTypeId?: number | null;
+} & Record<string, unknown>;
 
 // ============================================
 // Party (Queue) Router
@@ -11,15 +19,15 @@ export const partyRouter = router({
   // スタッフ用: 受付一覧取得
   list: protectedProcedure
     .input(z.object({ storeId: z.number() }))
-    .query(async ({ ctx, input }) => {
+    .query(async ({ ctx, input }: ProtectedOpts<{ storeId: number }>) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       const parties = await db.getPartiesByStoreId(input.storeId);
 
       // 席種情報を付加
       const seatTypes = await db.getSeatTypesByStoreId(input.storeId);
-      const seatTypeMap = new Map(seatTypes.map(s => [s.id, s]));
+      const seatTypeMap = new Map(seatTypes.map((s: SeatTypeRow) => [s.id, s]));
 
-      return parties.map(p => ({
+      return parties.map((p: PartyRow) => ({
         ...p,
         preferredSeatType: p.preferredSeatTypeId ? seatTypeMap.get(p.preferredSeatTypeId) : null,
         assignedSeatType: p.assignedSeatTypeId ? seatTypeMap.get(p.assignedSeatTypeId) : null,
@@ -41,7 +49,19 @@ export const partyRouter = router({
       allergies: z.string().optional(),
       priority: z.number().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input }: ProtectedOpts<{
+      storeId: number;
+      guestName?: string;
+      partySize: number;
+      childCount?: number;
+      hasStroller?: boolean;
+      phone?: string;
+      email?: string;
+      preferredSeatTypeId?: number;
+      notes?: string;
+      allergies?: string;
+      priority?: number;
+    }>) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
 
       // 受付停止チェック
@@ -97,11 +117,25 @@ export const partyRouter = router({
       allergies: z.string().optional(),
       notes: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input }: PublicOpts<{
+      storeId: number;
+      guestName?: string;
+      partySize: number;
+      childCount?: number;
+      hasStroller?: boolean;
+      phone?: string;
+      email?: string;
+      preferredSeatTypeId?: number;
+      allergies?: string;
+      notes?: string;
+    }>) => {
       // 受付停止チェック
       const store = await db.getStoreById(input.storeId);
       if (!store) {
         throw new TRPCError({ code: "NOT_FOUND", message: "店舗が見つかりません" });
+      }
+      if (store.enablePosV2UI) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "この店舗ではゲスト自己受付は利用できません" });
       }
       if (store.isReceptionPaused) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "現在受付を停止しています" });
@@ -144,14 +178,14 @@ export const partyRouter = router({
   // ゲスト用: 進捗確認（公開API）
   guestStatus: publicProcedure
     .input(z.object({ accessToken: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ input }: PublicOpts<{ accessToken: string }>) => {
       const party = await db.getPartyByAccessToken(input.accessToken);
       if (!party) {
         throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
       }
 
-      const position = await db.getPartyPosition(party.id, party.storeId);
       const store = await db.getStoreById(party.storeId);
+      const position = await db.getPartyPosition(party.id, party.storeId);
 
       // 注文可能かチェック
       const estimatedWaitMinutes = party.estimatedWaitMinutes ?? (
@@ -159,7 +193,9 @@ export const partyRouter = router({
           ? await db.calculateEstimatedWaitTime(party.storeId, party.preferredSeatTypeId)
           : null
       );
-      const canOrder = isOrderReleaseAllowed(store, position, estimatedWaitMinutes);
+      const canOrder = store?.enablePosV2UI
+        ? (party.posStatus === "OPEN" || party.posStatus === "ITEMIZED")
+        : isOrderReleaseAllowed(store, position, estimatedWaitMinutes);
 
       // 席種名取得
       let preferredSeatTypeName = null;
@@ -178,6 +214,8 @@ export const partyRouter = router({
         storeName: store?.name,
         storeId: party.storeId,
         guestName: party.guestName,
+        tableLabel: party.tableLabel,
+        posStatus: party.posStatus,
         preferredSeatType: preferredSeatTypeName,
         registeredAt: party.registeredAt,
         notifiedAt: party.notifiedAt,
@@ -187,10 +225,14 @@ export const partyRouter = router({
   // ゲスト用: 到着報告（公開API）
   guestArrive: publicProcedure
     .input(z.object({ accessToken: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input }: PublicOpts<{ accessToken: string }>) => {
       const party = await db.getPartyByAccessToken(input.accessToken);
       if (!party) {
         throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+      const store = await db.getStoreById(party.storeId);
+      if (store?.enablePosV2UI) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "この操作は利用できません" });
       }
 
       if (party.status === "arrived") {
@@ -213,10 +255,14 @@ export const partyRouter = router({
   // ゲスト用: キャンセル（公開API）
   guestCancel: publicProcedure
     .input(z.object({ accessToken: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input }: PublicOpts<{ accessToken: string }>) => {
       const party = await db.getPartyByAccessToken(input.accessToken);
       if (!party) {
         throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+      const store = await db.getStoreById(party.storeId);
+      if (store?.enablePosV2UI) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "この操作は利用できません" });
       }
 
       if (party.status === "canceled") {
@@ -244,7 +290,13 @@ export const partyRouter = router({
       assignedSeatTypeId: z.number().optional(),
       notes: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input }: ProtectedOpts<{
+      id: number;
+      storeId: number;
+      status: "waiting" | "notified" | "arrived" | "seated" | "canceled" | "noshow";
+      assignedSeatTypeId?: number;
+      notes?: string;
+    }>) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
 
       const party = await db.getPartyById(input.id);
@@ -277,7 +329,7 @@ export const partyRouter = router({
       id: z.number(),
       storeId: z.number(),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input }: ProtectedOpts<{ id: number; storeId: number }>) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
 
       const party = await db.getPartyById(input.id);

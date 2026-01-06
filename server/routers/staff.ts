@@ -29,7 +29,7 @@ export const staffRouter = router({
     .input(z.object({
       storeId: z.number(),
       userId: z.number(),
-      role: z.enum(["manager", "host", "staff", "kitchen"]),
+      role: z.enum(["manager", "cashier", "host", "staff", "kitchen"]),
     }))
     .mutation(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
@@ -47,7 +47,7 @@ export const staffRouter = router({
     .input(z.object({
       id: z.number(),
       storeId: z.number(),
-      role: z.enum(["manager", "host", "staff", "kitchen"]).optional(),
+      role: z.enum(["manager", "cashier", "host", "staff", "kitchen"]).optional(),
       isActive: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {

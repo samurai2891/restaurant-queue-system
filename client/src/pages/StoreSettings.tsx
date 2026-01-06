@@ -61,6 +61,10 @@ export default function StoreSettings() {
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [lineChannelAccessToken, setLineChannelAccessToken] = useState("");
   const [lineChannelSecret, setLineChannelSecret] = useState("");
+  const [enablePosV2UI, setEnablePosV2UI] = useState(false);
+  const [enableHandheld, setEnableHandheld] = useState(false);
+  const [enableMemoTicket, setEnableMemoTicket] = useState(false);
+  const [enableDraftHandoff, setEnableDraftHandoff] = useState(false);
   // autoNotifyRank and autoNotifyMinutes removed
 
   useEffect(() => {
@@ -75,6 +79,10 @@ export default function StoreSettings() {
       setSmsEnabled(store.smsEnabled ?? false);
       setLineChannelAccessToken(store.lineChannelAccessToken || "");
       setLineChannelSecret(store.lineChannelSecret || "");
+      setEnablePosV2UI(store.enablePosV2UI ?? false);
+      setEnableHandheld(store.enableHandheld ?? false);
+      setEnableMemoTicket(store.enableMemoTicket ?? false);
+      setEnableDraftHandoff(store.enableDraftHandoff ?? false);
       // autoNotifyRank and autoNotifyMinutes removed
     }
   }, [store]);
@@ -125,6 +133,16 @@ export default function StoreSettings() {
       email: storeEmail || undefined,
       orderReleaseRank: parseInt(orderReleaseRank),
       orderReleaseMinutes: parseInt(orderReleaseMinutes),
+    });
+  };
+
+  const handleSaveFeatures = () => {
+    updateStoreMutation.mutate({
+      id: storeIdNum,
+      enablePosV2UI,
+      enableHandheld,
+      enableMemoTicket,
+      enableDraftHandoff,
     });
   };
 
@@ -276,6 +294,52 @@ export default function StoreSettings() {
                   />
                 </div>
                 <Button onClick={handleSaveStore} disabled={updateStoreMutation.isPending}>
+                  {updateStoreMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <Save className="w-4 h-4 mr-2" />
+                  保存
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>機能フラグ</CardTitle>
+                <CardDescription>店舗単位で段階導入する機能のON/OFF</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">POS新UI（/pos）</p>
+                    <p className="text-sm text-muted-foreground">Airレジ型の伝票/会計UIを有効化</p>
+                  </div>
+                  <Switch checked={enablePosV2UI} onCheckedChange={setEnablePosV2UI} />
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">ハンディ（/handheld）</p>
+                    <p className="text-sm text-muted-foreground">対面注文入力をモバイルに寄せる</p>
+                  </div>
+                  <Switch checked={enableHandheld} onCheckedChange={setEnableHandheld} />
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">メモ伝票</p>
+                    <p className="text-sm text-muted-foreground">口頭メモ→後入力の運用を有効化</p>
+                  </div>
+                  <Switch checked={enableMemoTicket} onCheckedChange={setEnableMemoTicket} />
+                </div>
+
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">仮伝票引き継ぎ（Draft handoff）</p>
+                    <p className="text-sm text-muted-foreground">混雑対策（後続実装）</p>
+                  </div>
+                  <Switch checked={enableDraftHandoff} onCheckedChange={setEnableDraftHandoff} />
+                </div>
+
+                <Button onClick={handleSaveFeatures} disabled={updateStoreMutation.isPending}>
                   {updateStoreMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                   <Save className="w-4 h-4 mr-2" />
                   保存

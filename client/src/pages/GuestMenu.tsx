@@ -115,8 +115,7 @@ export default function GuestMenu() {
   }
 
   // 注文可否の判定
-  const isActive = status?.status === "waiting" || status?.status === "notified" || status?.status === "arrived";
-  const canOrder = Boolean(status?.canOrder && isActive);
+  const canOrder = Boolean(status?.canOrder);
 
   // 注文完了画面
   if (isOrderComplete) {
@@ -144,8 +143,8 @@ export default function GuestMenu() {
                 <div>
                   <p className="font-medium text-amber-800">ご注意</p>
                   <p className="text-sm text-amber-700 mt-1">
-                    お席にご案内後、調理を開始いたします。
-                    追加のご注文は着席後にスタッフまでお申し付けください。
+                    ご注文はスタッフが確認し、調理を開始します。
+                    追加のご注文もこの画面から行えます。
                   </p>
                 </div>
               </div>

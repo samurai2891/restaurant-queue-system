@@ -20,7 +20,7 @@ export const orderRouter = router({
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       const orders = await db.getOrdersByStoreId(input.storeId);
-      const kitchenOrders = orders;
+      const kitchenOrders = orders.filter(order => order.routeToKitchen);
 
       // 注文明細を付加
       const ordersWithItems = await Promise.all(
@@ -54,17 +54,38 @@ export const orderRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
       }
 
+      if (party.posStatus === "PAYMENT_LOCKED") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "会計中のため注文できません" });
+      }
+      if (party.posStatus === "PAID" || party.posStatus === "VOID") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "この伝票には注文できません" });
+      }
+      if (party.posStatus === "MEMO_ONLY") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
+      }
+
       // 注文可能かチェック
       const store = await db.getStoreById(party.storeId);
-      const position = await db.getPartyPosition(party.id, party.storeId);
-      const estimatedWaitMinutes = party.estimatedWaitMinutes ?? (
-        party.preferredSeatTypeId
-          ? await db.calculateEstimatedWaitTime(party.storeId, party.preferredSeatTypeId)
-          : null
-      );
+      if (!store) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "店舗が見つかりません" });
+      }
 
-      if (!store || !isOrderReleaseAllowed(store, position, estimatedWaitMinutes)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
+      if (!store.enablePosV2UI) {
+        const position = await db.getPartyPosition(party.id, party.storeId);
+        const estimatedWaitMinutes = party.estimatedWaitMinutes ?? (
+          party.preferredSeatTypeId
+            ? await db.calculateEstimatedWaitTime(party.storeId, party.preferredSeatTypeId)
+            : null
+        );
+
+        if (!isOrderReleaseAllowed(store, position, estimatedWaitMinutes)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
+        }
+      } else {
+        const canOrder = party.posStatus === "OPEN" || party.posStatus === "ITEMIZED";
+        if (!canOrder) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "現在注文できません" });
+        }
       }
 
       const { orderResult, totalAmount } = await createOrderWithItems({
@@ -73,7 +94,7 @@ export const orderRouter = router({
         items: input.items,
         notes: input.notes,
         orderType: party.status === "seated" ? "dine_in" : "preorder",
-        entrySource: input.entrySource ?? "guest",
+        entrySource: input.entrySource ?? "guest_qr",
         routeToKitchen: input.routeToKitchen,
       });
 

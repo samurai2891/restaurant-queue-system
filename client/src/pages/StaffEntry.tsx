@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/const";
-import { ChefHat, ClipboardList, CreditCard, LogIn, Store } from "lucide-react";
+import { ChefHat, ClipboardList, CreditCard, LogIn, Smartphone, Receipt, Store } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 
@@ -86,6 +86,24 @@ export default function StaffEntry() {
                   />
                 </div>
                 <div className="grid gap-2">
+                  <Button
+                    className="justify-start"
+                    variant="default"
+                    disabled={!trimmedStoreId}
+                    onClick={() => setLocation(`/pos/${trimmedStoreId}/tickets`)}
+                  >
+                    <Receipt className="mr-2 h-4 w-4" />
+                    POS（伝票一覧）
+                  </Button>
+                  <Button
+                    className="justify-start"
+                    variant="outline"
+                    disabled={!trimmedStoreId}
+                    onClick={() => setLocation(`/handheld/${trimmedStoreId}`)}
+                  >
+                    <Smartphone className="mr-2 h-4 w-4" />
+                    ハンディ注文
+                  </Button>
                   <Button
                     className="justify-start"
                     disabled={!trimmedStoreId}

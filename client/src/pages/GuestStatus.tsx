@@ -82,24 +82,6 @@ export default function GuestStatus() {
       refetchInterval: 10000 // 10秒ごとに自動更新
     }
   );
-  const arriveMutation = trpc.party.guestArrive.useMutation({
-    onSuccess: () => {
-      toast.success("到着をお伝えしました");
-      refetch();
-    },
-    onError: (mutationError) => {
-      toast.error(`エラー: ${mutationError.message}`);
-    },
-  });
-  const cancelMutation = trpc.party.guestCancel.useMutation({
-    onSuccess: () => {
-      toast.success("受付をキャンセルしました");
-      refetch();
-    },
-    onError: (mutationError) => {
-      toast.error(`エラー: ${mutationError.message}`);
-    },
-  });
 
   // 通知音を鳴らす（呼び出し時）
   useEffect(() => {
@@ -148,10 +130,7 @@ export default function GuestStatus() {
   const currentStatus = statusConfig[status.status as PartyStatus] || statusConfig.waiting;
   const StatusIcon = currentStatus.icon;
   const isActive = status.status === "waiting" || status.status === "notified" || status.status === "arrived";
-  const canOrder = status.canOrder && isActive;
-  const canArrive = status.status === "waiting" || status.status === "notified";
-  const canCancel = status.status === "waiting" || status.status === "notified" || status.status === "arrived";
-  const isMutating = arriveMutation.isPending || cancelMutation.isPending;
+  const canOrder = Boolean(status.canOrder);
 
   return (
     <div className={`min-h-screen ${currentStatus.bgColor} transition-colors duration-500`}>
@@ -283,37 +262,6 @@ export default function GuestStatus() {
               </Link>
             </CardContent>
           </Card>
-        )}
-
-        {(canArrive || canCancel) && (
-          <div className="mb-6 space-y-3">
-            {canArrive && (
-              <Button
-                className="w-full"
-                onClick={() => arriveMutation.mutate({ accessToken: token })}
-                disabled={isMutating}
-              >
-                {arriveMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                到着しました
-              </Button>
-            )}
-            {canCancel && (
-              <Button
-                variant="destructive"
-                className="w-full"
-                onClick={() => {
-                  if (!window.confirm("受付をキャンセルしますか？")) {
-                    return;
-                  }
-                  cancelMutation.mutate({ accessToken: token });
-                }}
-                disabled={isMutating}
-              >
-                {cancelMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                キャンセル
-              </Button>
-            )}
-          </div>
         )}
 
         {/* Refresh Button */}

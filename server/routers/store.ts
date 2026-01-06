@@ -72,6 +72,10 @@ export const storeRouter = router({
       lineChannelAccessToken: z.string().optional(),
       lineChannelSecret: z.string().optional(),
       smsEnabled: z.boolean().optional(),
+      enablePosV2UI: z.boolean().optional(),
+      enableHandheld: z.boolean().optional(),
+      enableMemoTicket: z.boolean().optional(),
+      enableDraftHandoff: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;

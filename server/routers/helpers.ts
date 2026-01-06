@@ -157,6 +157,16 @@ export const createStaffOrder = async ({
     throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
   }
 
+  if (party.posStatus === "PAYMENT_LOCKED") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "会計中のため注文できません" });
+  }
+  if (party.posStatus === "PAID" || party.posStatus === "VOID") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この伝票には注文できません" });
+  }
+  if (party.posStatus === "MEMO_ONLY") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "メモ伝票は明細入力に切り替えてください" });
+  }
+
   const { orderResult, totalAmount } = await createOrderWithItems({
     storeId: party.storeId,
     partyId: party.id,
@@ -202,6 +212,16 @@ export const createCheckoutOrder = async ({
 
   if (party.status === "canceled" || party.status === "noshow") {
     throw new TRPCError({ code: "BAD_REQUEST", message: "この受付には注文できません" });
+  }
+
+  if (party.posStatus === "PAYMENT_LOCKED") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "会計中のため追加できません" });
+  }
+  if (party.posStatus === "PAID" || party.posStatus === "VOID") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "この伝票には追加できません" });
+  }
+  if (party.posStatus === "MEMO_ONLY") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "メモ伝票は明細入力に切り替えてください" });
   }
 
   const { orderResult, totalAmount, orderItemIds } = await createOrderWithItems({

@@ -2,6 +2,13 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 
+// Stripe初期化（ENV未設定）でテストが落ちるのを防ぐ
+vi.mock("./stripe/stripe", () => ({
+  createCheckoutSession: vi.fn(),
+  createPortalSession: vi.fn(),
+  stripe: {},
+}));
+
 // Mock database functions
 vi.mock("./db", () => ({
   getStoreById: vi.fn().mockResolvedValue({

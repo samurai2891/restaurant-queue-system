@@ -6,6 +6,7 @@ import {
   storeStaff, InsertStoreStaff, StoreStaff,
   seatTypes, InsertSeatType, SeatType,
   parties, InsertParty, Party,
+  auditLogs, InsertAuditLog,
   notifications, InsertNotification, Notification,
   notificationTemplates, InsertNotificationTemplate,
   menuCategories, InsertMenuCategory,
@@ -292,6 +293,7 @@ export async function getPartiesByStoreId(storeId: number, status?: string[]) {
   let query = db.select().from(parties)
     .where(and(
       eq(parties.storeId, storeId),
+      eq(parties.partyKind, "DINE_IN"),
       gte(parties.registeredAt, today)
     ))
     .orderBy(asc(parties.priority), asc(parties.registeredAt));
@@ -335,6 +337,7 @@ export async function getWaitingParties(storeId: number) {
   return db.select().from(parties)
     .where(and(
       eq(parties.storeId, storeId),
+      eq(parties.partyKind, "DINE_IN"),
       eq(parties.status, 'waiting'),
       gte(parties.registeredAt, today)
     ))
@@ -346,7 +349,7 @@ export async function getPartyPosition(partyId: number, storeId: number): Promis
   if (!db) return 0;
   
   const party = await getPartyById(partyId);
-  if (!party || party.status !== 'waiting') return 0;
+  if (!party || party.partyKind !== "DINE_IN" || party.status !== 'waiting') return 0;
   
   const waitingParties = await getWaitingParties(storeId);
   const position = waitingParties.findIndex(p => p.id === partyId) + 1;
@@ -357,6 +360,86 @@ export async function updateParty(id: number, data: Partial<InsertParty>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(parties).set(data).where(eq(parties.id, id));
+}
+
+export async function getTicketsByStoreId(
+  storeId: number,
+  options: {
+    partyKind?: Party["partyKind"];
+    posStatus?: Party["posStatus"];
+    search?: string;
+  } = {}
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const conditions: SQL[] = [
+    eq(parties.storeId, storeId),
+    gte(parties.registeredAt, today),
+  ];
+
+  if (options.partyKind) {
+    conditions.push(eq(parties.partyKind, options.partyKind));
+  }
+
+  if (options.posStatus) {
+    conditions.push(eq(parties.posStatus, options.posStatus));
+  }
+
+  const search = options.search?.trim();
+  if (search) {
+    const likeQuery = `%${search}%`;
+    const numeric = Number.parseInt(search, 10);
+    const searchConditions: SQL[] = [
+      sql`${parties.tableLabel} LIKE ${likeQuery}`,
+      sql`${parties.guestName} LIKE ${likeQuery}`,
+    ];
+    if (Number.isFinite(numeric)) {
+      searchConditions.push(eq(parties.ticketNumber, numeric));
+    }
+    conditions.push(or(...searchConditions));
+  }
+
+  const ticketRows = await db
+    .select()
+    .from(parties)
+    .where(and(...conditions))
+    .orderBy(desc(parties.updatedAt));
+
+  if (ticketRows.length === 0) return [];
+
+  const partyIds = ticketRows.map((p) => p.id);
+
+  const totalsByParty = await db
+    .select({
+      partyId: orders.partyId,
+      unpaidTotalAmount: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)`.mapWith(Number),
+    })
+    .from(orders)
+    .where(and(inArray(orders.partyId, partyIds), eq(orders.paymentStatus, "unpaid")))
+    .groupBy(orders.partyId);
+
+  const itemsByParty = await db
+    .select({
+      partyId: orders.partyId,
+      unpaidItemsCount: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)`.mapWith(Number),
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(inArray(orders.partyId, partyIds), eq(orders.paymentStatus, "unpaid")))
+    .groupBy(orders.partyId);
+
+  const totalMap = new Map(totalsByParty.map((row) => [row.partyId, row.unpaidTotalAmount]));
+  const itemMap = new Map(itemsByParty.map((row) => [row.partyId, row.unpaidItemsCount]));
+
+  return ticketRows.map((ticket) => ({
+    ...ticket,
+    unpaidTotalAmount: totalMap.get(ticket.id) ?? 0,
+    unpaidItemsCount: itemMap.get(ticket.id) ?? 0,
+  }));
 }
 
 export async function updatePartyStatus(id: number, status: Party['status'], additionalData?: Partial<InsertParty>) {
@@ -430,6 +513,16 @@ export async function updateNotification(id: number, data: Partial<InsertNotific
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(notifications).set(data).where(eq(notifications.id, id));
+}
+
+// ============================================
+// Audit Log Functions
+// ============================================
+export async function createAuditLog(data: InsertAuditLog) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(auditLogs).values(data);
+  return result[0].insertId;
 }
 
 // ============================================
