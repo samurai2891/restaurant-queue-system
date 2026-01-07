@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -426,7 +427,7 @@ export default function Register() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background overflow-hidden">
+    <div className="flex -m-4 h-[calc(100svh-3.5rem)] min-h-0 flex-col bg-background overflow-hidden md:m-0 md:h-[100svh]">
       {/* Top Bar (Airレジ風) */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center justify-between px-4">
