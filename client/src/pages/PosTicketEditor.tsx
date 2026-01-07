@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
@@ -198,8 +198,223 @@ export default function PosTicketEditor() {
     );
   }
 
+  const ticketPane = (
+    <>
+      {isMemoOnly && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">メモ伝票</CardTitle>
+            <CardDescription>明細入力に切り替えるまで会計できません。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-2">
+              <div className="text-sm font-medium">メモ</div>
+              <Textarea
+                value={memoDraft}
+                onChange={(e) => setMemoDraft(e.target.value)}
+                placeholder="口頭メモを入力（例: 焼き加減、アレルギーなど）"
+                rows={4}
+              />
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() =>
+                updateMetaMutation.mutate({
+                  storeId: storeIdNum,
+                  ticketId: ticketIdNum,
+                  memoText: memoDraft,
+                })
+              }
+              disabled={updateMetaMutation.isPending}
+            >
+              メモを保存
+            </Button>
+            <Button
+              className="w-full"
+              onClick={() => markItemizedMutation.mutate({ storeId: storeIdNum, ticketId: ticketIdNum })}
+              disabled={markItemizedMutation.isPending}
+            >
+              明細入力に切り替える
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            明細
+            <Badge variant="outline">{combinedItems}点</Badge>
+          </CardTitle>
+          <CardDescription>未精算の明細（＋追加分）</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">未精算（既存）</div>
+              {unpaidOrders.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-2">未精算明細はありません</div>
+              ) : (
+                unpaidOrders.flatMap((order) =>
+                  (order.items ?? []).map((item) => (
+                    <div key={`p-${order.id}-${item.id}`} className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium line-clamp-1">
+                          {item.menuItem?.name ?? `商品#${item.menuItemId}`}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          x{item.quantity} · ¥{Number(item.subtotal ?? 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <Badge variant="secondary">確定済</Badge>
+                    </div>
+                  ))
+                )
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">追加（未保存）</div>
+              {cart.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-2">追加はありません</div>
+              ) : (
+                cart.map((c) => (
+                  <div
+                    key={`d-${c.menuItemId}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border bg-background p-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium line-clamp-1">{c.name}</div>
+                      <div className="text-xs text-muted-foreground">¥{(c.price * c.quantity).toLocaleString()}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-full"
+                        onClick={() => {
+                          if (c.quantity === 1) removeFromCart(c.menuItemId);
+                          else updateQuantity(c.menuItemId, -1);
+                        }}
+                        disabled={isLocked}
+                      >
+                        {c.quantity === 1 ? <Trash2 className="h-4 w-4 text-red-500" /> : <Minus className="h-4 w-4" />}
+                      </Button>
+                      <span className="w-8 text-center font-bold">{c.quantity}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 rounded-full"
+                        onClick={() => updateQuantity(c.menuItemId, 1)}
+                        disabled={isLocked}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">既存合計</span>
+            <span className="font-semibold">¥{persistedTotalAmount.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">追加合計</span>
+            <span className="font-semibold">¥{draftTotalAmount.toLocaleString()}</span>
+          </div>
+          <div className="flex items-center justify-between text-base">
+            <span className="font-semibold">合計（税込）</span>
+            <span className="text-xl font-bold text-primary">¥{combinedTotal.toLocaleString()}</span>
+          </div>
+        </CardContent>
+      </Card>
+    </>
+  );
+
+  const menuPane = (
+    <>
+      {isLocked && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">会計中です</CardTitle>
+            <CardDescription>他端末の編集を制限しています。</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      <div className="flex items-center gap-3 rounded-xl border bg-background px-4 py-2 shadow-sm">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <Input
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="商品名で検索..."
+          className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+          disabled={isLocked || isMemoOnly}
+        />
+      </div>
+
+      <Tabs value={activeCategory} onValueChange={setActiveCategory}>
+        <ScrollArea className="w-full">
+          <TabsList className="inline-flex h-auto p-1 bg-muted/50">
+            <TabsTrigger value="all" className="rounded-full px-5 py-3 data-[state=active]:bg-primary data-[state=active]:text-white">
+              すべて
+            </TabsTrigger>
+            {categories?.map((c) => (
+              <TabsTrigger
+                key={c.id}
+                value={String(c.id)}
+                className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+              >
+                {c.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </ScrollArea>
+      </Tabs>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {filteredItems.map((item) => {
+          const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`rounded-xl border bg-background p-4 text-left shadow-sm transition hover:shadow-md ${
+                isSoldOut ? "opacity-60" : ""
+              }`}
+              onClick={() => addToCart(item)}
+              disabled={isSoldOut || isLocked || isMemoOnly}
+            >
+              <div className="font-semibold line-clamp-2">{item.name}</div>
+              <div className="mt-2 text-lg font-bold text-primary">
+                ¥{Number(item.price).toLocaleString()}
+              </div>
+              <div className="mt-2">
+                {isSoldOut ? (
+                  <Badge variant="secondary">売切れ</Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    在庫あり
+                  </Badge>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen supports-[height:100svh]:h-[100svh] bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center justify-between px-4">
@@ -252,227 +467,60 @@ export default function PosTicketEditor() {
         </div>
       </header>
 
-      {/* Body: Airレジ風の2カラム */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-0">
-        {/* Left: 明細 */}
-        <div className="border-r bg-muted/10">
-          <div className="p-4 space-y-4">
-            {isMemoOnly && (
-              <Card className="border-amber-200 bg-amber-50">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">メモ伝票</CardTitle>
-                  <CardDescription>明細入力に切り替えるまで会計できません。</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <div className="text-sm font-medium">メモ</div>
-                    <Textarea
-                      value={memoDraft}
-                      onChange={(e) => setMemoDraft(e.target.value)}
-                      placeholder="口頭メモを入力（例: 焼き加減、アレルギーなど）"
-                      rows={4}
-                    />
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => updateMetaMutation.mutate({
-                      storeId: storeIdNum,
-                      ticketId: ticketIdNum,
-                      memoText: memoDraft,
-                    })}
-                    disabled={updateMetaMutation.isPending}
-                  >
-                    メモを保存
-                  </Button>
-                  <Button
-                    className="w-full"
-                    onClick={() => markItemizedMutation.mutate({ storeId: storeIdNum, ticketId: ticketIdNum })}
-                    disabled={markItemizedMutation.isPending}
-                  >
-                    明細入力に切り替える
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+      {/* Body */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {/* Desktop: Airレジ風の2カラム */}
+        <div className="hidden lg:grid h-full min-h-0 grid-cols-[420px_1fr] gap-0">
+          {/* Left: 明細 */}
+          <div className="border-r bg-muted/10 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-4">
+                {ticketPane}
+              </div>
+            </ScrollArea>
+          </div>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2">
-                  明細
-                  <Badge variant="outline">{combinedItems}点</Badge>
-                </CardTitle>
-                <CardDescription>未精算の明細（＋追加分）</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ScrollArea className="h-[50vh] pr-3">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">未精算（既存）</div>
-                      {unpaidOrders.length === 0 ? (
-                        <div className="text-sm text-muted-foreground py-2">未精算明細はありません</div>
-                      ) : (
-                        unpaidOrders.flatMap((order) =>
-                          (order.items ?? []).map((item) => (
-                            <div key={`p-${order.id}-${item.id}`} className="flex items-center justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="font-medium line-clamp-1">
-                                  {item.menuItem?.name ?? `商品#${item.menuItemId}`}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  x{item.quantity} · ¥{Number(item.subtotal ?? 0).toLocaleString()}
-                                </div>
-                              </div>
-                              <Badge variant="secondary">確定済</Badge>
-                            </div>
-                          ))
-                        )
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">追加（未保存）</div>
-                      {cart.length === 0 ? (
-                        <div className="text-sm text-muted-foreground py-2">追加はありません</div>
-                      ) : (
-                        cart.map((c) => (
-                          <div key={`d-${c.menuItemId}`} className="flex items-center justify-between gap-3 rounded-lg border bg-background p-2">
-                            <div className="min-w-0">
-                              <div className="font-medium line-clamp-1">{c.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                ¥{(c.price * c.quantity).toLocaleString()}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-9 w-9 rounded-full"
-                                onClick={() => {
-                                  if (c.quantity === 1) removeFromCart(c.menuItemId);
-                                  else updateQuantity(c.menuItemId, -1);
-                                }}
-                                disabled={isLocked}
-                              >
-                                {c.quantity === 1 ? (
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                ) : (
-                                  <Minus className="h-4 w-4" />
-                                )}
-                              </Button>
-                              <span className="w-8 text-center font-bold">{c.quantity}</span>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-9 w-9 rounded-full"
-                                onClick={() => updateQuantity(c.menuItemId, 1)}
-                                disabled={isLocked}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </ScrollArea>
-
-                <Separator />
-
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">既存合計</span>
-                  <span className="font-semibold">¥{persistedTotalAmount.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">追加合計</span>
-                  <span className="font-semibold">¥{draftTotalAmount.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between text-base">
-                  <span className="font-semibold">合計（税込）</span>
-                  <span className="text-xl font-bold text-primary">¥{combinedTotal.toLocaleString()}</span>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Right: 商品タイル */}
+          <div className="min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div className="p-4 space-y-4">
+                {menuPane}
+              </div>
+            </ScrollArea>
           </div>
         </div>
 
-        {/* Right: 商品タイル */}
-        <div className="p-4 space-y-4">
-          {isLocked && (
-            <Card className="border-blue-200 bg-blue-50">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">会計中です</CardTitle>
-                <CardDescription>他端末の編集を制限しています。</CardDescription>
-              </CardHeader>
-            </Card>
-          )}
-
-          <div className="flex items-center gap-3 rounded-xl border bg-background px-4 py-2 shadow-sm">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="商品名で検索..."
-              className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-              disabled={isLocked || isMemoOnly}
-            />
-          </div>
-
-          <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-            <ScrollArea className="w-full">
-              <TabsList className="inline-flex h-auto p-1 bg-muted/50">
-                <TabsTrigger value="all" className="rounded-full px-5 py-3 data-[state=active]:bg-primary data-[state=active]:text-white">
-                  すべて
-                </TabsTrigger>
-                {categories?.map((c) => (
-                  <TabsTrigger
-                    key={c.id}
-                    value={String(c.id)}
-                    className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
-                  >
-                    {c.name}
-                  </TabsTrigger>
-                ))}
+        {/* Mobile: 伝票/メニューをタブで切替 */}
+        <div className="lg:hidden h-full min-h-0 overflow-hidden">
+          <Tabs defaultValue="ticket" className="h-full min-h-0 gap-0">
+            <div className="shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-2">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="ticket">伝票</TabsTrigger>
+                <TabsTrigger value="menu">メニュー</TabsTrigger>
               </TabsList>
-            </ScrollArea>
-          </Tabs>
+            </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredItems.map((item) => {
-              const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`rounded-xl border bg-background p-4 text-left shadow-sm transition hover:shadow-md ${
-                    isSoldOut ? "opacity-60" : ""
-                  }`}
-                  onClick={() => addToCart(item)}
-                  disabled={isSoldOut || isLocked || isMemoOnly}
-                >
-                  <div className="font-semibold line-clamp-2">{item.name}</div>
-                  <div className="mt-2 text-lg font-bold text-primary">
-                    ¥{Number(item.price).toLocaleString()}
-                  </div>
-                  <div className="mt-2">
-                    {isSoldOut ? (
-                      <Badge variant="secondary">売切れ</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs">在庫あり</Badge>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+            <TabsContent value="ticket" className="min-h-0">
+              <ScrollArea className="h-full">
+                <div className="min-h-full bg-muted/10 p-4 space-y-4">
+                  {ticketPane}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+
+            <TabsContent value="menu" className="min-h-0">
+              <ScrollArea className="h-full">
+                <div className="p-4 space-y-4">
+                  {menuPane}
+                </div>
+              </ScrollArea>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
       {/* Bottom Bar */}
-      <div className="sticky bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex items-center justify-between gap-3 p-3">
           <div className="text-sm text-muted-foreground">
             追加 {draftTotalItems}点 · ¥{draftTotalAmount.toLocaleString()}
