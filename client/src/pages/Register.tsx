@@ -30,6 +30,7 @@ import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
 type LeftTab = "tickets" | "queue";
+type MobileTab = "left" | "menu";
 type CreateTicketKind = "DINE_IN" | "COUNTER_SALE" | "MEMO_ONLY";
 
 type TicketPosStatus = "OPEN" | "MEMO_ONLY" | "ITEMIZED" | "PAYMENT_LOCKED" | "PAID" | "VOID";
@@ -49,6 +50,7 @@ export default function Register() {
   const { loading: authLoading, isAuthenticated } = useAuth();
 
   const [leftTab, setLeftTab] = useState<LeftTab>("tickets");
+  const [mobileTab, setMobileTab] = useState<MobileTab>("left");
   const [ticketSearch, setTicketSearch] = useState("");
   const [queueSearch, setQueueSearch] = useState("");
   const [activeTicketId, setActiveTicketId] = useState<number | null>(null);
@@ -465,10 +467,32 @@ export default function Register() {
       </header>
 
       <Sheet>
+        {/* Mobile Tab Switcher */}
+        <div className="lg:hidden border-b bg-muted/10 px-4 py-2">
+          <div className="flex gap-2">
+            <Button
+              variant={mobileTab === "left" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setMobileTab("left")}
+            >
+              伝票/受付
+            </Button>
+            <Button
+              variant={mobileTab === "menu" ? "default" : "outline"}
+              size="sm"
+              className="flex-1"
+              onClick={() => setMobileTab("menu")}
+            >
+              メニュー
+            </Button>
+          </div>
+        </div>
+
         {/* Body: 2カラム（左:導線/中央:商品） */}
         <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[340px_1fr] overflow-hidden">
           {/* Left */}
-          <div className="border-r bg-muted/10 flex min-h-0 flex-col">
+          <div className={`border-r bg-muted/10 flex min-h-0 flex-col ${mobileTab !== "left" ? "hidden lg:flex" : ""}`}>
             <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
               <div className="grid grid-cols-2 gap-2">
                 <Button
@@ -542,7 +566,10 @@ export default function Register() {
                               key={t.id}
                               type="button"
                               className="text-left"
-                              onClick={() => setActiveTicketId(t.id)}
+                              onClick={() => {
+                                setActiveTicketId(t.id);
+                                setMobileTab("menu");
+                              }}
                             >
                               <Card className={`hover:shadow-sm transition-shadow ${isActive ? "ring-2 ring-primary" : ""}`}>
                                 <CardContent className="p-4 flex flex-col gap-2">
@@ -604,7 +631,10 @@ export default function Register() {
                               key={p.id}
                               type="button"
                               className="text-left"
-                              onClick={() => setActiveTicketId(p.id)}
+                              onClick={() => {
+                                setActiveTicketId(p.id);
+                                setMobileTab("menu");
+                              }}
                             >
                               <Card className={`hover:shadow-sm transition-shadow ${isActive ? "ring-2 ring-primary" : ""}`}>
                                 <CardContent className="p-4 flex flex-col gap-2">
@@ -631,7 +661,7 @@ export default function Register() {
           </div>
 
           {/* Center */}
-          <div className="flex min-h-0 flex-col">
+          <div className={`flex min-h-0 flex-col ${mobileTab !== "menu" ? "hidden lg:flex" : ""}`}>
             <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
               {!ticket ? (
                 <Card>
