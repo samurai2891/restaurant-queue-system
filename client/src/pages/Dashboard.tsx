@@ -10,15 +10,16 @@ import { trpc } from "@/lib/trpc";
 import {
   BarChart3,
   ChefHat,
+  ClipboardList,
   CreditCard,
   Download,
   Loader2,
   LogOut,
   Plus,
   Settings,
+  ShoppingCart,
   Store,
   Utensils,
-  Users,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -232,7 +233,7 @@ export default function Dashboard() {
                     <div className="space-y-2">
                       <p className="text-xs font-semibold text-muted-foreground">スタッフ導線</p>
                       <div className="grid grid-cols-2 gap-3">
-                        <Link href={`/cashier/${store.id}`}>
+                        <Link href={`/register/${store.id}`}>
                           <Button className="w-full justify-start gap-2">
                             <CreditCard className="w-4 h-4" />
                             レジ
@@ -240,8 +241,14 @@ export default function Dashboard() {
                         </Link>
                         <Link href={`/queue/${store.id}`}>
                           <Button variant="outline" className="w-full justify-start gap-2">
-                            <Users className="w-4 h-4" />
+                            <ClipboardList className="w-4 h-4" />
                             キュー管理
+                          </Button>
+                        </Link>
+                        <Link href={`/cashier/${store.id}`}>
+                          <Button variant="outline" className="w-full justify-start gap-2">
+                            <ShoppingCart className="w-4 h-4" />
+                            注文受付
                           </Button>
                         </Link>
                         <Link href={`/kitchen/${store.id}`}>
