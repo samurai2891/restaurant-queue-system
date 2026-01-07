@@ -15,7 +15,7 @@ export const paymentRouter = router({
       cashReceived: z.number().min(0),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const ticket = await db.getPartyById(input.ticketId);
       if (!ticket || ticket.storeId !== input.storeId) {
@@ -79,7 +79,7 @@ export const paymentRouter = router({
       paymentMethod: z.string().min(1).max(50),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const ticket = await db.getPartyById(input.ticketId);
       if (!ticket || ticket.storeId !== input.storeId) {

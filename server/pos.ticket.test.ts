@@ -359,7 +359,7 @@ describe("POS v1 (ticket/payment) routers", () => {
     expect(result[0]?.id).toBe(1);
   });
 
-  it("RBAC: ticket.create allows cashier and rejects staff", async () => {
+  it("RBAC: ticket.create allows cashier/staff and rejects kitchen", async () => {
     // Given: 前提条件（cashierは許可）
     mockDb.getStaffByUserAndStore.mockResolvedValueOnce({
       id: 1,
@@ -376,12 +376,26 @@ describe("POS v1 (ticket/payment) routers", () => {
       caller.ticket.create({ storeId: 1, kind: "DINE_IN", partySize: 2 })
     ).resolves.toMatchObject({ id: 10, ticketNumber: 1001 });
 
-    // Given: 前提条件（staffは拒否）
+    // Given: 前提条件（staffも許可）
     mockDb.getStaffByUserAndStore.mockResolvedValueOnce({
       id: 2,
       storeId: 1,
       userId: 1,
       role: "staff",
+      isActive: true,
+    });
+
+    // When: 実行する操作（伝票作成）
+    await expect(
+      caller.ticket.create({ storeId: 1, kind: "DINE_IN", partySize: 2 })
+    ).resolves.toMatchObject({ id: 10, ticketNumber: 1001 });
+
+    // Given: 前提条件（kitchenは拒否）
+    mockDb.getStaffByUserAndStore.mockResolvedValueOnce({
+      id: 3,
+      storeId: 1,
+      userId: 1,
+      role: "kitchen",
       isActive: true,
     });
 

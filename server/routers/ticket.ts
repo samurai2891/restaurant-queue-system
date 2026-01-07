@@ -29,7 +29,7 @@ export const ticketRouter = router({
       memoImageUrl: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const partySize = input.kind === "COUNTER_SALE"
         ? 1
@@ -128,7 +128,7 @@ export const ticketRouter = router({
       memoImageUrl: z.string().nullable().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const ticket = await db.getPartyById(input.ticketId);
       if (!ticket || ticket.storeId !== input.storeId) {
@@ -139,14 +139,13 @@ export const ticketRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "会計中のため編集できません" });
       }
 
-      const updates: Record<string, string | number | null> = {};
-      if (input.tableLabel !== undefined) updates.tableLabel = input.tableLabel;
-      if (input.partySize !== undefined && input.partySize !== null) updates.partySize = input.partySize;
-      if (input.guestName !== undefined) updates.guestName = input.guestName;
-      if (input.memoText !== undefined) updates.memoText = input.memoText;
-      if (input.memoImageUrl !== undefined) updates.memoImageUrl = input.memoImageUrl;
-
-      await db.updateParty(input.ticketId, updates);
+      await db.updateParty(input.ticketId, {
+        ...(input.tableLabel !== undefined ? { tableLabel: input.tableLabel } : {}),
+        ...(input.partySize !== undefined ? { partySize: input.partySize } : {}),
+        ...(input.guestName !== undefined ? { guestName: input.guestName } : {}),
+        ...(input.memoText !== undefined ? { memoText: input.memoText } : {}),
+        ...(input.memoImageUrl !== undefined ? { memoImageUrl: input.memoImageUrl } : {}),
+      });
 
       return { success: true };
     }),
@@ -157,7 +156,7 @@ export const ticketRouter = router({
       ticketId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const ticket = await db.getPartyById(input.ticketId);
       if (!ticket || ticket.storeId !== input.storeId) {
@@ -182,7 +181,7 @@ export const ticketRouter = router({
       ticketId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const ticket = await db.getPartyById(input.ticketId);
       if (!ticket || ticket.storeId !== input.storeId) {
@@ -237,7 +236,7 @@ export const ticketRouter = router({
       ticketId: z.number(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier"]);
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
 
       const ticket = await db.getPartyById(input.ticketId);
       if (!ticket || ticket.storeId !== input.storeId) {

@@ -6,41 +6,11 @@ import { checkStoreAccess, isOrderReleaseAllowed } from "./helpers";
 type AuthedCtx = { user: { id: number } };
 type ProtectedOpts<TInput> = { ctx: AuthedCtx; input: TInput };
 type PublicOpts<TInput> = { input: TInput };
-type SeatTypeRow = { id: number; name: string };
+type SeatTypeRow = { id: number };
 type PartyRow = {
-  id: number;
-  storeId: number;
-  ticketNumber: number;
-  guestName: string | null;
-  partySize: number;
-  childCount: number | null;
-  hasStroller: boolean | null;
-  phone: string | null;
-  email: string | null;
-  lineUserId: string | null;
-  preferredSeatTypeId: number | null;
-  assignedSeatTypeId: number | null;
-  status: "waiting" | "notified" | "arrived" | "seated" | "canceled" | "noshow";
-  partyKind: "DINE_IN" | "COUNTER_SALE" | "MEMO_ONLY";
-  posStatus: "OPEN" | "MEMO_ONLY" | "ITEMIZED" | "PAYMENT_LOCKED" | "PAID" | "VOID";
-  tableLabel: string | null;
-  memoText: string | null;
-  memoImageUrl: string | null;
-  paymentLockedAt: Date | null;
-  paymentLockedByStaffId: number | null;
-  priority: number | null;
-  notes: string | null;
-  allergies: string | null;
-  accessToken: string;
-  estimatedWaitMinutes: number | null;
-  registeredAt: Date;
-  notifiedAt: Date | null;
-  arrivedAt: Date | null;
-  seatedAt: Date | null;
-  completedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+  preferredSeatTypeId?: number | null;
+  assignedSeatTypeId?: number | null;
+} & Record<string, unknown>;
 
 // ============================================
 // Party (Queue) Router
@@ -226,6 +196,8 @@ export const partyRouter = router({
       const canOrder = store?.enablePosV2UI
         ? (party.posStatus === "OPEN" || party.posStatus === "ITEMIZED")
         : isOrderReleaseAllowed(store, position, estimatedWaitMinutes);
+      const isOrderBlockedByPosStatus = ["PAYMENT_LOCKED", "PAID", "VOID", "MEMO_ONLY"].includes(party.posStatus);
+      const effectiveCanOrder = isOrderBlockedByPosStatus ? false : canOrder;
 
       // 席種名取得
       let preferredSeatTypeName = null;
@@ -240,7 +212,7 @@ export const partyRouter = router({
         partySize: party.partySize,
         position,
         estimatedWaitMinutes: estimatedWaitMinutes ?? party.estimatedWaitMinutes ?? 0,
-        canOrder,
+        canOrder: effectiveCanOrder,
         storeName: store?.name,
         storeId: party.storeId,
         guestName: party.guestName,

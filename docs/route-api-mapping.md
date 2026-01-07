@@ -17,7 +17,7 @@
 | `/settings/:storeId` | `StoreSettings` | `client/src/pages/StoreSettings.tsx` | 管理（店舗設定） |
 | `/menu/:storeId` | `MenuManagement` | `client/src/pages/MenuManagement.tsx` | 管理（メニュー） |
 | `/cashier/:storeId` | `Cashier` | `client/src/pages/Cashier.tsx` | 管理（会計） |
-| `/register/:storeId` | `Register` | `client/src/pages/Register.tsx` | 管理（会計専用入力） |
+| `/register/:storeId` | `Register` | `client/src/pages/Register.tsx` | 管理（AirPay風 1画面POSレジ / 伝票=party） |
 | `/kitchen/:storeId` | `KitchenDisplay` | `client/src/pages/KitchenDisplay.tsx` | キッチン表示 |
 | `/analytics/:storeId` | `Analytics` | `client/src/pages/Analytics.tsx` | 分析ダッシュボード |
 | `/export/:storeId` | `DataExport` | `client/src/pages/DataExport.tsx` | データ出力 |
@@ -149,7 +149,7 @@
 | --- | --- | --- |
 | `GuestRegister` (`/guest/register/:storeId`) | `publicStore.get`, `publicStore.seatTypes`, `party.guestRegister` | ゲストの受付登録 |
 | `QueueManagement` (`/queue/:storeId`) | `store.get`, `party.list`, `seatType.list`, `party.create`, `party.updateStatus`, `notification.send`, `store.toggleReception` | スタッフ受付・通知 |
-| `Register` (`/register/:storeId`) | `store.get`, `menu.categories`, `menu.items`, `party.list`, `order.list`, `order.createForCheckout`, `order.confirmPaymentBatch` | 会計入力寄りの受付/注文連動 |
+| `Register` (`/register/:storeId`) | `store.get`, `menu.categories`, `menu.items`, `ticket.list`, `ticket.get`, `ticket.create`, `ticket.updateMeta`, `ticket.markItemized`, `ticket.addItemsToTicket`, `ticket.lockForPayment`, `ticket.unlock`, `party.list`, `payment.confirmCash`, `payment.confirmManual` | AirPay風の1画面POSレジ（伝票=party）。伝票/受付から選択し、商品追加→会計まで完結 |
 
 ### 3-2. 待ち状況フロー
 
@@ -171,7 +171,7 @@
 | 画面 | 主なAPI | 備考 |
 | --- | --- | --- |
 | `Cashier` (`/cashier/:storeId`) | `store.get`, `menu.categories`, `menu.items`, `party.list`, `order.list`, `party.create`, `order.createByStaff`, `order.confirmPaymentBatch` | レジでの注文・会計 |
-| `Register` (`/register/:storeId`) | `order.createForCheckout`, `order.confirmPaymentBatch` | 会計入力専用 |
+| `Register` (`/register/:storeId`) | `ticket.*`, `payment.*` | POS伝票ベースの会計（ロック→確定） |
 
 ### 3-5. 管理/運用フロー
 

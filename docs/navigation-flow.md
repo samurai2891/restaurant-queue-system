@@ -14,7 +14,7 @@
 | `StaffEntry.tsx` | `/staff` | スタッフ入口 | スタッフ導線の入口ページ |
 | `Dashboard.tsx` | `/dashboard`, `/admin` | 管理者 | 管理者ポータル |
 | `QueueManagement.tsx` | `/queue/:storeId` | スタッフ | キュー管理 |
-| `Register.tsx` | `/register/:storeId` | スタッフ | レジ |
+| `Register.tsx` | `/register/:storeId` | スタッフ | レジ（AirPay風 1画面POSレジ / 伝票=party） |
 | `Cashier.tsx` | `/cashier/:storeId` | スタッフ | 注文受付 |
 | `KitchenDisplay.tsx` | `/kitchen/:storeId` | スタッフ | キッチン |
 | `MenuManagement.tsx` | `/menu/:storeId` | 管理者 | メニュー管理 |
@@ -59,3 +59,12 @@ flowchart TD
 - **ゲスト導線**: `guestRegister`, `guestStatus`, `guestArrive`, `guestCancel`, `guestOrders` などは `publicProcedure` で公開されており、ゲスト向けUIと整合しています。 (`server/routers.ts`)
 - **スタッフ導線**: `checkStoreAccess` によりスタッフの在籍/ロールを検証し、`protectedProcedure` で認証済みユーザーのみアクセス可能にしています。 (`server/routers.ts`)
 - **管理者導線**: `adminProcedure` により `ctx.user.role === 'admin'` のみ利用可能なシステムAPIがあります。管理画面の入口を `/admin` として明確化しました。 (`server/_core/trpc.ts`, `server/_core/systemRouter.ts`)
+
+## 4. `/register/:storeId` のレジ（AirPay風 1画面）概要
+
+- **目的**: 旧Step式（受付選択→注文→支払い）を廃止し、**1画面で伝票選択/商品追加/会計**まで完結。
+- **導線**:
+  - 伝票: 伝票番号/テーブル/顧客名で検索→選択
+  - 受付: キュー（waiting/notified/arrived）から選択
+  - 新規: 店内伝票 / 店頭（Quick Sale）/ メモ伝票
+- **会計**: 伝票を `ticket.lockForPayment` でロックし、`payment.confirmCash` / `payment.confirmManual` で確定。
