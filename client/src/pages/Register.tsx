@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
@@ -425,7 +426,7 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex h-full min-h-0 flex-col bg-background">
       {/* Top Bar (Airレジ風) */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center justify-between px-4">
@@ -462,461 +463,512 @@ export default function Register() {
           </div>
       </header>
 
-      {/* Body: 3カラム（左:導線/中央:商品/右:明細+会計） */}
-      <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr_460px] min-h-[calc(100vh-3.5rem)]">
-        {/* Left */}
-        <div className="border-r bg-muted/10">
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                onClick={() => handleCreateOpen("DINE_IN")}
-                disabled={createTicketMutation.isPending || storeIdNum <= 0}
-                className="gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                店内伝票
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleCreateOpen("COUNTER_SALE")}
-                disabled={createTicketMutation.isPending || storeIdNum <= 0}
-                className="gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                店頭（Quick）
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleCreateOpen("MEMO_ONLY")}
-                disabled={createTicketMutation.isPending || storeIdNum <= 0}
-                className="gap-2 col-span-2"
-              >
-                <Plus className="w-4 h-4" />
-                メモ伝票
-              </Button>
+      <Sheet>
+        {/* Body: 2カラム（左:導線/中央:商品） */}
+        <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[340px_1fr] overflow-hidden">
+          {/* Left */}
+          <div className="border-r bg-muted/10 flex min-h-0 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => handleCreateOpen("DINE_IN")}
+                  disabled={createTicketMutation.isPending || storeIdNum <= 0}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  店内伝票
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleCreateOpen("COUNTER_SALE")}
+                  disabled={createTicketMutation.isPending || storeIdNum <= 0}
+                  className="gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  店頭（Quick）
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleCreateOpen("MEMO_ONLY")}
+                  disabled={createTicketMutation.isPending || storeIdNum <= 0}
+                  className="gap-2 col-span-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  メモ伝票
+                </Button>
+              </div>
+
+              <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as LeftTab)}>
+                <TabsList className="w-full">
+                  <TabsTrigger value="tickets" className="flex-1">
+                    伝票
+                  </TabsTrigger>
+                  <TabsTrigger value="queue" className="flex-1">
+                    受付
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {leftTab === "tickets" ? (
+                <div className="flex flex-1 min-h-0 flex-col gap-3">
+                  <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 shadow-sm">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={ticketSearch}
+                      onChange={(e) => setTicketSearch(e.target.value)}
+                      placeholder="伝票番号 / テーブル / 顧客名で検索"
+                      className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                    />
                   </div>
 
-            <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as LeftTab)}>
-              <TabsList className="w-full">
-                <TabsTrigger value="tickets" className="flex-1">
-                  伝票
-                </TabsTrigger>
-                <TabsTrigger value="queue" className="flex-1">
-                  受付
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            {leftTab === "tickets" ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 shadow-sm">
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={ticketSearch}
-                    onChange={(e) => setTicketSearch(e.target.value)}
-                    placeholder="伝票番号 / テーブル / 顧客名で検索"
-                    className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                  />
-                    </div>
-
-                <ScrollArea className="h-[70vh] pr-3">
-                  {ticketsLoading ? (
-                    <div className="flex items-center justify-center py-10 text-muted-foreground">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    </div>
-                  ) : !tickets || tickets.length === 0 ? (
-                    <Card>
-                      <CardContent className="py-10 text-center text-muted-foreground">
-                        伝票がありません
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid gap-3">
-                      {tickets.map((t) => {
-                        const isActive = activeTicketId === t.id;
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            className="text-left"
-                            onClick={() => setActiveTicketId(t.id)}
-                          >
-                            <Card className={`hover:shadow-sm transition-shadow ${isActive ? "ring-2 ring-primary" : ""}`}>
-                              <CardContent className="p-4 flex flex-col gap-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant={statusBadgeVariant[t.posStatus] ?? "secondary"}>
-                                    {t.posStatus}
-                                  </Badge>
-                                  <div className="font-semibold">
-                                    伝票 #{t.ticketNumber}
-                                    {t.tableLabel ? ` · ${t.tableLabel}` : ""}
-                          </div>
-                        </div>
-                                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                                  <div className="line-clamp-1">
-                                    {t.guestName ?? "お客様"}（{t.partySize}名）
+                  <ScrollArea className="flex-1 min-h-0 pr-3">
+                    {ticketsLoading ? (
+                      <div className="flex items-center justify-center py-10 text-muted-foreground">
+                        <Loader2 className="w-5 h-5 animate-spin" />
                       </div>
-                                  <div className="font-semibold text-foreground">
-                                    ¥{Number(t.unpaidTotalAmount ?? 0).toLocaleString()}
-                  </div>
-                  </div>
-                </CardContent>
-              </Card>
-                          </button>
-                        );
-                      })}
-            </div>
-          )}
-                </ScrollArea>
+                    ) : !tickets || tickets.length === 0 ? (
+                      <Card>
+                        <CardContent className="py-10 text-center text-muted-foreground">
+                          伝票がありません
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-3">
+                        {tickets.map((t) => {
+                          const isActive = activeTicketId === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              className="text-left"
+                              onClick={() => setActiveTicketId(t.id)}
+                            >
+                              <Card className={`hover:shadow-sm transition-shadow ${isActive ? "ring-2 ring-primary" : ""}`}>
+                                <CardContent className="p-4 flex flex-col gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={statusBadgeVariant[t.posStatus] ?? "secondary"}>
+                                      {t.posStatus}
+                                    </Badge>
+                                    <div className="font-semibold">
+                                      伝票 #{t.ticketNumber}
+                                      {t.tableLabel ? ` · ${t.tableLabel}` : ""}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                                    <div className="line-clamp-1">
+                                      {t.guestName ?? "お客様"}（{t.partySize}名）
+                                    </div>
+                                    <div className="font-semibold text-foreground">
+                                      ¥{Number(t.unpaidTotalAmount ?? 0).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </ScrollArea>
                 </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 shadow-sm">
-                  <Search className="h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={queueSearch}
-                    onChange={(e) => setQueueSearch(e.target.value)}
-                    placeholder="受付番号 / テーブル / 名前で検索"
-                    className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                  />
-              </div>
+              ) : (
+                <div className="flex flex-1 min-h-0 flex-col gap-3">
+                  <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2 shadow-sm">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={queueSearch}
+                      onChange={(e) => setQueueSearch(e.target.value)}
+                      placeholder="受付番号 / テーブル / 名前で検索"
+                      className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                    />
+                  </div>
 
-                <ScrollArea className="h-[70vh] pr-3">
-                  {partiesLoading ? (
-                    <div className="flex items-center justify-center py-10 text-muted-foreground">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    </div>
-                  ) : visibleQueueParties.length === 0 ? (
-                  <Card>
-                      <CardContent className="py-10 text-center text-muted-foreground">
-                        対象の受付がありません
-                      </CardContent>
+                  <ScrollArea className="flex-1 min-h-0 pr-3">
+                    {partiesLoading ? (
+                      <div className="flex items-center justify-center py-10 text-muted-foreground">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      </div>
+                    ) : visibleQueueParties.length === 0 ? (
+                      <Card>
+                        <CardContent className="py-10 text-center text-muted-foreground">
+                          対象の受付がありません
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-3">
+                        {visibleQueueParties.map((p) => {
+                          const isActive = activeTicketId === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="text-left"
+                              onClick={() => setActiveTicketId(p.id)}
+                            >
+                              <Card className={`hover:shadow-sm transition-shadow ${isActive ? "ring-2 ring-primary" : ""}`}>
+                                <CardContent className="p-4 flex flex-col gap-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="font-semibold">
+                                      受付 #{p.ticketNumber}
+                                    </div>
+                                    <Badge variant="outline">{p.status}</Badge>
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {p.guestName ?? "お客様"}（{p.partySize}名）
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Center */}
+          <div className="flex min-h-0 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+              {!ticket ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">
+                    左のリストから伝票を選択するか、新規伝票を作成してください。
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {isLocked && (
+                    <Card className="border-blue-200 bg-blue-50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">会計中です</CardTitle>
+                        <CardDescription>他端末からの編集/追加を制限しています。</CardDescription>
+                      </CardHeader>
                     </Card>
-                  ) : (
-                    <div className="grid gap-3">
-                      {visibleQueueParties.map((p) => {
-                        const isActive = activeTicketId === p.id;
+                  )}
+                  {isMemoOnly && (
+                    <Card className="border-amber-200 bg-amber-50">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">メモ伝票</CardTitle>
+                        <CardDescription>明細入力に切り替えるまで商品追加/会計はできません。</CardDescription>
+                      </CardHeader>
+                    </Card>
+                  )}
+
+                  <div className="flex items-center gap-3 rounded-xl border bg-background px-4 py-2 shadow-sm">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={productSearch}
+                      onChange={(event) => setProductSearch(event.target.value)}
+                      placeholder="商品名で検索..."
+                      className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+                      disabled={!canAddLineItems || isSubmittingPayment}
+                    />
+                  </div>
+
+                  <Tabs value={activeCategory} onValueChange={setActiveCategory}>
+                    <ScrollArea className="w-full">
+                      <TabsList className="inline-flex h-auto p-1 bg-muted/50">
+                        <TabsTrigger
+                          value="all"
+                          className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+                        >
+                          すべて
+                        </TabsTrigger>
+                        {categories?.map((c) => (
+                          <TabsTrigger
+                            key={c.id}
+                            value={String(c.id)}
+                            className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+                          >
+                            {c.name}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </ScrollArea>
+                  </Tabs>
+
+                  <ScrollArea className="flex-1 min-h-0 pr-2">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {filteredItems.map((item) => {
+                        const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
                         return (
                           <button
-                            key={p.id}
+                            key={item.id}
                             type="button"
-                            className="text-left"
-                            onClick={() => setActiveTicketId(p.id)}
+                            className={`rounded-xl border bg-background p-4 text-left shadow-sm transition hover:shadow-md ${
+                              isSoldOut ? "opacity-60" : ""
+                            }`}
+                            onClick={() => addToCart(item)}
+                            disabled={isSoldOut || !canAddLineItems || isSubmittingPayment}
                           >
-                            <Card className={`hover:shadow-sm transition-shadow ${isActive ? "ring-2 ring-primary" : ""}`}>
-                              <CardContent className="p-4 flex flex-col gap-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="font-semibold">
-                                    受付 #{p.ticketNumber}
-                      </div>
-                                  <Badge variant="outline">{p.status}</Badge>
-                      </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {p.guestName ?? "お客様"}（{p.partySize}名）
-                      </div>
-                    </CardContent>
-                  </Card>
+                            <div className="font-semibold line-clamp-2">{item.name}</div>
+                            <div className="mt-2 text-lg font-bold text-primary">
+                              ¥{Number(item.price).toLocaleString()}
+                            </div>
+                            <div className="mt-2">
+                              {isSoldOut ? (
+                                <Badge variant="secondary">売切れ</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">在庫あり</Badge>
+                              )}
+                            </div>
                           </button>
                         );
                       })}
                     </div>
-                  )}
-                </ScrollArea>
-              </div>
-            )}
+                  </ScrollArea>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Center */}
-        <div className="p-4 space-y-4">
-          {!ticket ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                左のリストから伝票を選択するか、新規伝票を作成してください。
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              {isLocked && (
-                <Card className="border-blue-200 bg-blue-50">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">会計中です</CardTitle>
-                    <CardDescription>他端末からの編集/追加を制限しています。</CardDescription>
-                  </CardHeader>
-                </Card>
-              )}
-              {isMemoOnly && (
-                <Card className="border-amber-200 bg-amber-50">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">メモ伝票</CardTitle>
-                    <CardDescription>明細入力に切り替えるまで商品追加/会計はできません。</CardDescription>
-                  </CardHeader>
-                </Card>
-              )}
+        {/* Bottom Bar */}
+        <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <SheetTrigger asChild>
+              <button
+                type="button"
+                disabled={!ticket}
+                className={`flex flex-1 flex-col items-start gap-1 rounded-lg p-2 text-left transition-colors ${
+                  ticket ? "hover:bg-muted/40" : "cursor-not-allowed opacity-60"
+                }`}
+              >
+                <span className="text-xs text-muted-foreground">
+                  {ticket ? `伝票 #${ticket.ticketNumber} · ${posStatus}` : "伝票を選択してください"}
+                </span>
+                <span className="text-base font-bold">
+                  {ticket ? `${combinedItems}点 · ¥${combinedTotal.toLocaleString()}` : "-"}
+                </span>
+              </button>
+            </SheetTrigger>
 
-              <div className="flex items-center gap-3 rounded-xl border bg-background px-4 py-2 shadow-sm">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={productSearch}
-                  onChange={(event) => setProductSearch(event.target.value)}
-                  placeholder="商品名で検索..."
-                  className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-                  disabled={!canAddLineItems || isSubmittingPayment}
-                />
-              </div>
-
-              <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-                <ScrollArea className="w-full">
-                  <TabsList className="inline-flex h-auto p-1 bg-muted/50">
-                    <TabsTrigger
-                      value="all"
-                      className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
-                    >
-                      すべて
-                    </TabsTrigger>
-                    {categories?.map((c) => (
-                      <TabsTrigger
-                        key={c.id}
-                        value={String(c.id)}
-                        className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
-                      >
-                        {c.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </ScrollArea>
-              </Tabs>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {filteredItems.map((item) => {
-                  const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`rounded-xl border bg-background p-4 text-left shadow-sm transition hover:shadow-md ${
-                        isSoldOut ? "opacity-60" : ""
-                      }`}
-                      onClick={() => addToCart(item)}
-                      disabled={isSoldOut || !canAddLineItems || isSubmittingPayment}
-                    >
-                      <div className="font-semibold line-clamp-2">{item.name}</div>
-                      <div className="mt-2 text-lg font-bold text-primary">
-                        ¥{Number(item.price).toLocaleString()}
-                      </div>
-                      <div className="mt-2">
-                        {isSoldOut ? (
-                          <Badge variant="secondary">売切れ</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs">在庫あり</Badge>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
+            <Button
+              variant="outline"
+              className="h-12"
+              onClick={handleSaveDraft}
+              disabled={!canAddLineItems || cart.length === 0 || addItemsMutation.isPending}
+            >
+              一時保存
+            </Button>
+            <Button
+              className="h-12"
+              onClick={handleStartPayment}
+              disabled={!ticket || isMemoOnly || lockMutation.isPending || isSubmittingPayment}
+            >
+              <Wallet className="w-4 h-4 mr-2" />
+              支払い
+            </Button>
+          </div>
         </div>
 
-        {/* Right */}
-        <div className="border-l bg-muted/10">
-          <div className="p-4 space-y-4">
-            {!ticket ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  伝票を選択すると、明細と会計が表示されます。
-                </CardContent>
-              </Card>
-                    ) : (
-                      <>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-2">
-                        明細 <Badge variant="outline">{combinedItems}点</Badge>
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={statusBadgeVariant[posStatus] ?? "secondary"}>{posStatus}</Badge>
+        {/* Details Sheet */}
+        <SheetContent side="bottom" className="h-[80vh] rounded-t-2xl px-0 pb-6">
+          <SheetHeader className="border-b">
+            <SheetTitle>明細</SheetTitle>
+            <SheetDescription>
+              {ticket
+                ? `伝票 #${ticket.ticketNumber}${ticket.tableLabel ? ` · ${ticket.tableLabel}` : ""} · ${ticket.partySize}名`
+                : "伝票を選択すると、明細と会計が表示されます。"}
+            </SheetDescription>
+          </SheetHeader>
+
+          {!ticket ? (
+            <div className="p-4 text-center text-muted-foreground">
+              伝票を選択してください。
+            </div>
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4">
+              <Card className="flex min-h-0 flex-1 flex-col">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      明細 <Badge variant="outline">{combinedItems}点</Badge>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={statusBadgeVariant[posStatus] ?? "secondary"}>{posStatus}</Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenMeta}
+                        disabled={!canEditTicket || updateMetaMutation.isPending}
+                      >
+                        <Pencil className="w-4 h-4 mr-2" />
+                        伝票編集
+                      </Button>
+                      {posStatus === "PAYMENT_LOCKED" && (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={handleOpenMeta}
-                          disabled={!canEditTicket || updateMetaMutation.isPending}
+                          onClick={() => unlockMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
+                          disabled={unlockMutation.isPending}
                         >
-                          <Pencil className="w-4 h-4 mr-2" />
-                          伝票編集
+                          ロック解除
                         </Button>
-                        {posStatus === "PAYMENT_LOCKED" && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => unlockMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
-                            disabled={unlockMutation.isPending}
-                          >
-                            ロック解除
-                          </Button>
+                      )}
+                    </div>
+                  </CardTitle>
+                  <CardDescription>
+                    伝票 #{ticket.ticketNumber}
+                    {ticket.tableLabel ? ` · ${ticket.tableLabel}` : ""}
+                    {` · ${ticket.partySize}名`}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
+                  {isMemoOnly && (
+                    <div className="space-y-3 rounded-lg border bg-amber-50 p-3">
+                      <div className="text-sm font-medium">メモ</div>
+                      <Textarea
+                        value={memoDraft}
+                        onChange={(e) => setMemoDraft(e.target.value)}
+                        placeholder="口頭メモを入力（例: 焼き加減、アレルギーなど）"
+                        rows={4}
+                      />
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          variant="outline"
+                          onClick={() =>
+                            updateMetaMutation.mutate({
+                              storeId: storeIdNum,
+                              ticketId: ticket.id,
+                              memoText: memoDraft,
+                            })
+                          }
+                          disabled={updateMetaMutation.isPending || isLocked}
+                        >
+                          メモを保存
+                        </Button>
+                        <Button
+                          onClick={() => markItemizedMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
+                          disabled={markItemizedMutation.isPending || isLocked}
+                        >
+                          明細入力に切り替える
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <ScrollArea className="flex-1 min-h-0 pr-3">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">未精算（既存）</div>
+                        {unpaidOrders.length === 0 ? (
+                          <div className="text-sm text-muted-foreground py-2">未精算明細はありません</div>
+                        ) : (
+                          unpaidOrders.flatMap((order) =>
+                            (order.items ?? []).map((it) => (
+                              <div key={`p-${order.id}-${it.id}`} className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="font-medium line-clamp-1">
+                                    {it.menuItem?.name ?? `商品#${it.menuItemId}`}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    x{it.quantity} · ¥{Number(it.subtotal ?? 0).toLocaleString()}
+                                  </div>
+                                </div>
+                                <Badge variant="secondary">確定済</Badge>
+                              </div>
+                            ))
+                          )
                         )}
                       </div>
-                    </CardTitle>
-                    <CardDescription>
-                      伝票 #{ticket.ticketNumber}
-                      {ticket.tableLabel ? ` · ${ticket.tableLabel}` : ""}
-                      {` · ${ticket.partySize}名`}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {isMemoOnly && (
-                      <div className="space-y-3 rounded-lg border bg-amber-50 p-3">
-                        <div className="text-sm font-medium">メモ</div>
-                        <Textarea
-                          value={memoDraft}
-                          onChange={(e) => setMemoDraft(e.target.value)}
-                          placeholder="口頭メモを入力（例: 焼き加減、アレルギーなど）"
-                          rows={4}
-                        />
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              updateMetaMutation.mutate({
-                                storeId: storeIdNum,
-                                ticketId: ticket.id,
-                                memoText: memoDraft,
-                              })
-                            }
-                            disabled={updateMetaMutation.isPending || isLocked}
-                          >
-                            メモを保存
-                          </Button>
-                          <Button
-                            onClick={() => markItemizedMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
-                            disabled={markItemizedMutation.isPending || isLocked}
-                          >
-                            明細入力に切り替える
-                  </Button>
-              </div>
-            </div>
-          )}
-
-                    <ScrollArea className="h-[45vh] pr-3">
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">未精算（既存）</div>
-                          {unpaidOrders.length === 0 ? (
-                            <div className="text-sm text-muted-foreground py-2">未精算明細はありません</div>
-                          ) : (
-                            unpaidOrders.flatMap((order) =>
-                              (order.items ?? []).map((it) => (
-                                <div key={`p-${order.id}-${it.id}`} className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="font-medium line-clamp-1">
-                                      {it.menuItem?.name ?? `商品#${it.menuItemId}`}
-                </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      x{it.quantity} · ¥{Number(it.subtotal ?? 0).toLocaleString()}
-                                    </div>
-                                  </div>
-                                  <Badge variant="secondary">確定済</Badge>
-                                </div>
-                              ))
-                            )
-                          )}
-              </div>
-
-                        <Separator />
-
-                        <div className="space-y-2">
-                          <div className="text-xs text-muted-foreground">追加（未保存）</div>
-                          {cart.length === 0 ? (
-                            <div className="text-sm text-muted-foreground py-2">追加はありません</div>
-                          ) : (
-                            cart.map((c) => (
-                              <div
-                                key={`d-${c.menuItemId}`}
-                                className="flex items-center justify-between gap-3 rounded-lg border bg-background p-2"
-                              >
-                                <div className="min-w-0">
-                                  <div className="font-medium line-clamp-1">{c.name}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    ¥{(c.price * c.quantity).toLocaleString()}
-                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-9 w-9 rounded-full"
-                                    onClick={() => {
-                                      if (c.quantity === 1) removeFromCart(c.menuItemId);
-                                      else updateQuantity(c.menuItemId, -1);
-                                    }}
-                                    disabled={!canAddLineItems}
-                                  >
-                                    {c.quantity === 1 ? (
-                                      <Trash2 className="h-4 w-4 text-red-500" />
-                                    ) : (
-                                      <Minus className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                  <span className="w-8 text-center font-bold">{c.quantity}</span>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-9 w-9 rounded-full"
-                                    onClick={() => updateQuantity(c.menuItemId, 1)}
-                                    disabled={!canAddLineItems}
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                          </div>
-                        ))
-                      )}
-                        </div>
-                      </div>
-                    </ScrollArea>
 
                       <Separator />
 
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">既存合計</span>
-                      <span className="font-semibold">¥{persistedTotalAmount.toLocaleString()}</span>
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">追加（未保存）</div>
+                        {cart.length === 0 ? (
+                          <div className="text-sm text-muted-foreground py-2">追加はありません</div>
+                        ) : (
+                          cart.map((c) => (
+                            <div
+                              key={`d-${c.menuItemId}`}
+                              className="flex items-center justify-between gap-3 rounded-lg border bg-background p-2"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-medium line-clamp-1">{c.name}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  ¥{(c.price * c.quantity).toLocaleString()}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9 rounded-full"
+                                  onClick={() => {
+                                    if (c.quantity === 1) removeFromCart(c.menuItemId);
+                                    else updateQuantity(c.menuItemId, -1);
+                                  }}
+                                  disabled={!canAddLineItems}
+                                >
+                                  {c.quantity === 1 ? (
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  ) : (
+                                    <Minus className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <span className="w-8 text-center font-bold">{c.quantity}</span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-9 w-9 rounded-full"
+                                  onClick={() => updateQuantity(c.menuItemId, 1)}
+                                  disabled={!canAddLineItems}
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">追加合計</span>
-                      <span className="font-semibold">¥{draftTotalAmount.toLocaleString()}</span>
                     </div>
-                    <div className="flex items-center justify-between text-base">
-                      <span className="font-semibold">合計（税込）</span>
-                      <span className="text-xl font-bold text-primary">¥{combinedTotal.toLocaleString()}</span>
+                  </ScrollArea>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">既存合計</span>
+                    <span className="font-semibold">¥{persistedTotalAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">追加合計</span>
+                    <span className="font-semibold">¥{draftTotalAmount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-base">
+                    <span className="font-semibold">合計（税込）</span>
+                    <span className="text-xl font-bold text-primary">¥{combinedTotal.toLocaleString()}</span>
                   </div>
 
-                    <div className="flex items-center gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        className="h-12 flex-1"
-                        onClick={handleSaveDraft}
-                        disabled={!canAddLineItems || cart.length === 0 || addItemsMutation.isPending}
-                      >
-                        一時保存
-                      </Button>
-                      <Button
-                        className="h-12 flex-1"
-                        onClick={handleStartPayment}
-                        disabled={Boolean(ticket) && (isMemoOnly || lockMutation.isPending || isSubmittingPayment)}
-                      >
-                        <Wallet className="w-4 h-4 mr-2" />
-                        支払い
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-                      </div>
+                  <div className="flex items-center gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      className="h-12 flex-1"
+                      onClick={handleSaveDraft}
+                      disabled={!canAddLineItems || cart.length === 0 || addItemsMutation.isPending}
+                    >
+                      一時保存
+                    </Button>
+                    <Button
+                      className="h-12 flex-1"
+                      onClick={handleStartPayment}
+                      disabled={!ticket || isMemoOnly || lockMutation.isPending || isSubmittingPayment}
+                    >
+                      <Wallet className="w-4 h-4 mr-2" />
+                      支払い
+                    </Button>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Create Ticket Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
