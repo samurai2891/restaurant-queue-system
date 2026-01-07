@@ -139,3 +139,9 @@
 - [x] URLパラメータのstoreIdが正しく解析されない原因を特定（DashboardLayoutの正規表現マッチング問題）
 - [x] StoreSettingsコンポーネントでNaN値のバリデーションを追加（早期リターンとエラーメッセージ表示）
 - [x] DashboardLayoutでstoreIdがない場合のナビゲーションリンクを非表示に修正
+
+
+## GitHub同期後の修正（2026-01-07）
+- [x] GitHubリポジトリから最新変更をプル（Register.tsx AirPay風リファクタリング、RBAC調整、新テストケース追加）
+- [x] リモート変更で再発したTypeScriptエラーを修正（party.ts PartyRow型定義、ticket.ts null値処理）
+- [x] 全26件のテスト通過、TypeScriptエラーなし
