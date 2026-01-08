@@ -21,6 +21,7 @@ export const menuRouter = router({
       name: z.string(),
       description: z.string().optional(),
       imageUrl: z.string().optional(),
+      color: z.string().optional(),
       sortOrder: z.number().optional(),
       availableTime: z.any().optional(),
     }))
@@ -28,6 +29,26 @@ export const menuRouter = router({
       await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager"]);
       const id = await db.createMenuCategory(input);
       return { id };
+    }),
+
+  // カテゴリ更新
+  updateCategory: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      imageUrl: z.string().optional(),
+      color: z.string().optional(),
+      sortOrder: z.number().optional(),
+      availableTime: z.any().optional(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, storeId, ...data } = input;
+      await checkStoreAccess(ctx.user.id, storeId, ["owner", "manager"]);
+      await db.updateMenuCategory(id, data);
+      return { success: true };
     }),
 
   // 商品一覧

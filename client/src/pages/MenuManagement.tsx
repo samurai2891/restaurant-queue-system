@@ -31,6 +31,22 @@ const isValidUrl = (value: string) => {
   }
 };
 
+// カテゴリ色オプション
+const CATEGORY_COLORS = [
+  { value: "blue", label: "青", bg: "bg-blue-500", text: "text-white" },
+  { value: "cyan", label: "シアン", bg: "bg-cyan-500", text: "text-white" },
+  { value: "green", label: "緑", bg: "bg-green-500", text: "text-white" },
+  { value: "yellow", label: "黄", bg: "bg-yellow-500", text: "text-black" },
+  { value: "orange", label: "オレンジ", bg: "bg-orange-500", text: "text-white" },
+  { value: "red", label: "赤", bg: "bg-red-500", text: "text-white" },
+  { value: "gray", label: "グレー", bg: "bg-gray-500", text: "text-white" },
+] as const;
+
+const getCategoryColorClasses = (color: string | null | undefined) => {
+  const found = CATEGORY_COLORS.find(c => c.value === color);
+  return found || CATEGORY_COLORS[0];
+};
+
 export default function MenuManagement() {
   const { storeId } = useParams<{ storeId: string }>();
   const storeIdNum = parseInt(storeId || "0");
@@ -43,6 +59,14 @@ export default function MenuManagement() {
   // Category form
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
+  const [categoryColor, setCategoryColor] = useState("blue");
+
+  // Edit category form
+  const [isEditCategoryOpen, setIsEditCategoryOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
+  const [editCategoryDescription, setEditCategoryDescription] = useState("");
+  const [editCategoryColor, setEditCategoryColor] = useState("blue");
   
   // Item form
   const [itemName, setItemName] = useState("");
@@ -99,6 +123,19 @@ export default function MenuManagement() {
       setIsAddCategoryOpen(false);
       setCategoryName("");
       setCategoryDescription("");
+      setCategoryColor("blue");
+      refetchCategories();
+    },
+    onError: (error) => {
+      toast.error(`エラー: ${error.message}`);
+    }
+  });
+
+  const updateCategoryMutation = trpc.menu.updateCategory.useMutation({
+    onSuccess: () => {
+      toast.success("カテゴリを更新しました");
+      setIsEditCategoryOpen(false);
+      setEditingCategoryId(null);
       refetchCategories();
     },
     onError: (error) => {
@@ -143,6 +180,35 @@ export default function MenuManagement() {
       storeId: storeIdNum,
       name: categoryName,
       description: categoryDescription || undefined,
+      color: categoryColor,
+    });
+  };
+
+  const openEditCategoryDialog = (category: {
+    id: number;
+    name: string;
+    description?: string | null;
+    color?: string | null;
+  }) => {
+    setEditingCategoryId(category.id);
+    setEditCategoryName(category.name);
+    setEditCategoryDescription(category.description ?? "");
+    setEditCategoryColor(category.color ?? "blue");
+    setIsEditCategoryOpen(true);
+  };
+
+  const handleUpdateCategory = () => {
+    if (!editingCategoryId) return;
+    if (!editCategoryName.trim()) {
+      toast.error("カテゴリ名を入力してください");
+      return;
+    }
+    updateCategoryMutation.mutate({
+      id: editingCategoryId,
+      storeId: storeIdNum,
+      name: editCategoryName,
+      description: editCategoryDescription || undefined,
+      color: editCategoryColor,
     });
   };
 
@@ -302,6 +368,22 @@ export default function MenuManagement() {
                       onChange={(e) => setCategoryDescription(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>表示色</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORY_COLORS.map((color) => (
+                        <button
+                          key={color.value}
+                          type="button"
+                          className={`w-10 h-10 rounded-lg ${color.bg} ${
+                            categoryColor === color.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                          }`}
+                          onClick={() => setCategoryColor(color.value)}
+                          title={color.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsAddCategoryOpen(false)}>
@@ -310,6 +392,61 @@ export default function MenuManagement() {
                   <Button onClick={handleAddCategory} disabled={createCategoryMutation.isPending}>
                     {createCategoryMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     追加
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Edit Category Dialog */}
+            <Dialog open={isEditCategoryOpen} onOpenChange={(open) => {
+              setIsEditCategoryOpen(open);
+              if (!open) setEditingCategoryId(null);
+            }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>カテゴリを編集</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>カテゴリ名 *</Label>
+                    <Input
+                      placeholder="ドリンク、フード、デザートなど"
+                      value={editCategoryName}
+                      onChange={(e) => setEditCategoryName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>説明</Label>
+                    <Textarea
+                      placeholder="カテゴリの説明"
+                      value={editCategoryDescription}
+                      onChange={(e) => setEditCategoryDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>表示色</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORY_COLORS.map((color) => (
+                        <button
+                          key={color.value}
+                          type="button"
+                          className={`w-10 h-10 rounded-lg ${color.bg} ${
+                            editCategoryColor === color.value ? "ring-2 ring-offset-2 ring-primary" : ""
+                          }`}
+                          onClick={() => setEditCategoryColor(color.value)}
+                          title={color.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsEditCategoryOpen(false)}>
+                    キャンセル
+                  </Button>
+                  <Button onClick={handleUpdateCategory} disabled={updateCategoryMutation.isPending}>
+                    {updateCategoryMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    更新
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -561,22 +698,40 @@ export default function MenuManagement() {
                   >
                     すべて
                   </button>
-                  {categories?.map(category => (
-                    <button
-                      key={category.id}
-                      className={`w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors ${
-                        selectedCategoryId === category.id ? 'bg-muted' : ''
-                      }`}
-                      onClick={() => setSelectedCategoryId(category.id)}
-                    >
-                      <p className="font-medium">{category.name}</p>
-                      {category.description && (
-                        <p className="text-sm text-muted-foreground truncate">
-                          {category.description}
-                        </p>
-                      )}
-                    </button>
-                  ))}
+                  {categories?.map(category => {
+                    const colorClasses = getCategoryColorClasses(category.color);
+                    return (
+                      <div
+                        key={category.id}
+                        className={`flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors ${
+                          selectedCategoryId === category.id ? 'bg-muted' : ''
+                        }`}
+                      >
+                        <button
+                          className="flex-1 text-left flex items-center gap-3"
+                          onClick={() => setSelectedCategoryId(category.id)}
+                        >
+                          <div className={`w-4 h-4 rounded ${colorClasses.bg} shrink-0`} />
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{category.name}</p>
+                            {category.description && (
+                              <p className="text-sm text-muted-foreground truncate">
+                                {category.description}
+                              </p>
+                            )}
+                          </div>
+                        </button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => openEditCategoryDialog(category)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

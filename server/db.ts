@@ -4,6 +4,7 @@ import {
   InsertUser, users, 
   stores, InsertStore, Store,
   storeStaff, InsertStoreStaff, StoreStaff,
+  tables, InsertTable, Table,
   seatTypes, InsertSeatType, SeatType,
   parties, InsertParty, Party,
   auditLogs, InsertAuditLog,
@@ -193,6 +194,121 @@ export async function updateStoreStaff(id: number, data: Partial<InsertStoreStaf
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(storeStaff).set(data).where(eq(storeStaff.id, id));
+}
+
+// ============================================
+// Table Functions
+// ============================================
+export async function createTable(data: InsertTable) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(tables).values(data);
+  return result[0].insertId;
+}
+
+export async function getTablesByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tables)
+    .where(and(eq(tables.storeId, storeId), eq(tables.isActive, true)))
+    .orderBy(asc(tables.section), asc(tables.sortOrder), asc(tables.name));
+}
+
+export async function getTableById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tables).where(eq(tables.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateTable(id: number, data: Partial<InsertTable>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(tables).set(data).where(eq(tables.id, id));
+}
+
+/**
+ * テーブル一覧と現在のパーティ情報を取得（キャッシャー画面用）
+ */
+export async function getTablesWithPartiesByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // アクティブなテーブル一覧を取得
+  const tableList = await db.select().from(tables)
+    .where(and(eq(tables.storeId, storeId), eq(tables.isActive, true)))
+    .orderBy(asc(tables.section), asc(tables.sortOrder), asc(tables.name));
+
+  if (tableList.length === 0) return [];
+
+  // 現在アクティブなパーティ（本日のOPEN/ITEMIZED）を取得
+  const activeParties = await db.select().from(parties)
+    .where(and(
+      eq(parties.storeId, storeId),
+      gte(parties.registeredAt, today),
+      or(
+        eq(parties.posStatus, "OPEN"),
+        eq(parties.posStatus, "ITEMIZED")
+      )
+    ));
+
+  // 各パーティの未払い合計を取得
+  const partyIds = activeParties.map(p => p.id);
+  let unpaidTotals: Map<number, { totalAmount: number; itemCount: number }> = new Map();
+
+  if (partyIds.length > 0) {
+    const totalsByParty = await db
+      .select({
+        partyId: orders.partyId,
+        unpaidTotalAmount: sql<number>`COALESCE(SUM(${orders.totalAmount}), 0)`.mapWith(Number),
+      })
+      .from(orders)
+      .where(and(inArray(orders.partyId, partyIds), eq(orders.paymentStatus, "unpaid")))
+      .groupBy(orders.partyId);
+
+    const itemsByParty = await db
+      .select({
+        partyId: orders.partyId,
+        unpaidItemsCount: sql<number>`COALESCE(SUM(${orderItems.quantity}), 0)`.mapWith(Number),
+      })
+      .from(orderItems)
+      .innerJoin(orders, eq(orderItems.orderId, orders.id))
+      .where(and(inArray(orders.partyId, partyIds), eq(orders.paymentStatus, "unpaid")))
+      .groupBy(orders.partyId);
+
+    for (const row of totalsByParty) {
+      const existing = unpaidTotals.get(row.partyId) || { totalAmount: 0, itemCount: 0 };
+      existing.totalAmount = row.unpaidTotalAmount;
+      unpaidTotals.set(row.partyId, existing);
+    }
+    for (const row of itemsByParty) {
+      const existing = unpaidTotals.get(row.partyId) || { totalAmount: 0, itemCount: 0 };
+      existing.itemCount = row.unpaidItemsCount;
+      unpaidTotals.set(row.partyId, existing);
+    }
+  }
+
+  // テーブルIDとパーティのマッピング
+  const tablePartyMap = new Map<number, typeof activeParties[0] & { unpaidTotalAmount: number; unpaidItemsCount: number }>();
+  for (const party of activeParties) {
+    if (party.tableId) {
+      const unpaid = unpaidTotals.get(party.id) || { totalAmount: 0, itemCount: 0 };
+      tablePartyMap.set(party.tableId, {
+        ...party,
+        unpaidTotalAmount: unpaid.totalAmount,
+        unpaidItemsCount: unpaid.itemCount,
+      });
+    }
+  }
+
+  // テーブル一覧にパーティ情報を付与
+  return tableList.map(table => ({
+    ...table,
+    currentParty: tablePartyMap.get(table.id) || null,
+  }));
 }
 
 // ============================================
