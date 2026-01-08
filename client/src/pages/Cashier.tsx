@@ -1,32 +1,28 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { CartBuilder, CartDetailContent } from "@/components/Register/CartBuilder";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
   CheckCircle,
   Loader2,
+  Minus,
+  Plus,
+  Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
-
-interface Category {
-  id: number;
-  name: string;
-  description?: string | null;
-}
 
 type PartyStatus = "waiting" | "notified" | "arrived" | "seated" | "canceled" | "noshow";
 
@@ -40,7 +36,7 @@ type PartyOption = {
 
 export default function Cashier() {
   const { storeId } = useParams<{ storeId: string }>();
-  const storeIdNum = parseInt(storeId || "0", 10);
+  const storeIdNum = Number.parseInt(storeId || "0", 10);
   const { loading: authLoading, isAuthenticated } = useAuth();
 
   const [partyMode, setPartyMode] = useState<"existing" | "new">("existing");
@@ -48,10 +44,7 @@ export default function Cashier() {
   const [newPartyName, setNewPartyName] = useState("");
   const [newPartySize, setNewPartySize] = useState("2");
   const [notes, setNotes] = useState("");
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("cash");
-  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
-  const [cashReceived, setCashReceived] = useState("");
-  const hasInitializedSelection = useRef(false);
+  const [activeCategory, setActiveCategory] = useState<string>("all");
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -73,11 +66,6 @@ export default function Cashier() {
     { enabled: isAuthenticated && storeIdNum > 0, refetchInterval: 5000 }
   );
 
-  const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = trpc.order.list.useQuery(
-    { storeId: storeIdNum },
-    { enabled: isAuthenticated && storeIdNum > 0, refetchInterval: 5000 }
-  );
-
   const {
     cart,
     addToCart,
@@ -90,7 +78,6 @@ export default function Cashier() {
 
   const createPartyMutation = trpc.party.create.useMutation();
   const createOrderMutation = trpc.order.createByStaff.useMutation();
-  const confirmPaymentBatchMutation = trpc.order.confirmPaymentBatch.useMutation();
 
   const availableParties = useMemo(
     () =>
@@ -100,55 +87,18 @@ export default function Cashier() {
     [parties]
   );
 
-  const unpaidOrders = useMemo(
-    () => (orders ?? []).filter((order) => order.paymentStatus === "unpaid"),
-    [orders]
-  );
-
-  const selectedOrders = useMemo(
-    () => unpaidOrders.filter((order) => selectedOrderIds.includes(order.id)),
-    [unpaidOrders, selectedOrderIds]
-  );
-
-  const selectedOrderTotal = useMemo(
-    () => selectedOrders.reduce((sum, order) => sum + Number(order.totalAmount ?? 0), 0),
-    [selectedOrders]
-  );
-
-  const isCashPayment = selectedPaymentMethod === "cash";
-  const cashReceivedNumber = cashReceived ? Number(cashReceived) : 0;
-  const changeAmount = cashReceivedNumber - selectedOrderTotal;
-
-  useEffect(() => {
-    const unpaidOrderIds = unpaidOrders.map((order) => order.id);
-    setSelectedOrderIds((current) => {
-      if (!hasInitializedSelection.current) {
-        hasInitializedSelection.current = true;
-        return unpaidOrderIds;
-      }
-      return current.filter((orderId) => unpaidOrderIds.includes(orderId));
-    });
-
-    if (unpaidOrderIds.length === 0) {
-      hasInitializedSelection.current = false;
-    }
-  }, [unpaidOrders]);
+  const filteredItems = useMemo(() => {
+    const list = (items as MenuItem[] | undefined) ?? [];
+    if (activeCategory === "all") return list;
+    const catId = Number.parseInt(activeCategory, 10);
+    return list.filter((item) => item.categoryId === catId);
+  }, [items, activeCategory]);
 
   const isSubmitting = createPartyMutation.isPending || createOrderMutation.isPending;
-  const isPaymentSubmitting = confirmPaymentBatchMutation.isPending;
-  const partySizeNumber = parseInt(newPartySize, 10);
+  const partySizeNumber = Number.parseInt(newPartySize, 10);
   const canSubmit = cart.length > 0 && (
     partyMode === "existing" ? Boolean(selectedPartyId) : partySizeNumber > 0
   );
-  const canConfirmPayment = selectedOrderIds.length > 0
-    && selectedPaymentMethod.length > 0
-    && (!isCashPayment || cashReceivedNumber >= selectedOrderTotal);
-
-  useEffect(() => {
-    if (!isCashPayment) {
-      setCashReceived("");
-    }
-  }, [isCashPayment]);
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
@@ -164,7 +114,7 @@ export default function Cashier() {
           toast.error("注文先の受付を選択してください");
           return;
         }
-        partyId = parseInt(selectedPartyId, 10);
+        partyId = Number.parseInt(selectedPartyId, 10);
       } else {
         if (!partySizeNumber || partySizeNumber < 1) {
           toast.error("人数を入力してください");
@@ -196,7 +146,6 @@ export default function Cashier() {
         routeToKitchen: false,
       });
 
-      await refetchOrders();
       toast.success("注文を確定しました");
       clearCart();
       setNotes("");
@@ -213,33 +162,6 @@ export default function Cashier() {
     }
   };
 
-  const handleConfirmPayment = async () => {
-    if (selectedOrderIds.length === 0) {
-      toast.error("会計対象の注文を選択してください");
-      return;
-    }
-
-    if (!selectedPaymentMethod) {
-      toast.error("支払方法を選択してください");
-      return;
-    }
-
-    try {
-      await confirmPaymentBatchMutation.mutateAsync({
-        storeId: storeIdNum,
-        orderIds: selectedOrderIds,
-        paymentMethod: selectedPaymentMethod,
-      });
-
-      toast.success("会計を確定しました");
-      setSelectedOrderIds([]);
-      await refetchOrders();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "会計確定に失敗しました";
-      toast.error(message);
-    }
-  };
-
   if (authLoading || storeLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -248,293 +170,367 @@ export default function Cashier() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>ログインが必要です</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Link href="/staff">
+              <Button className="w-full">スタッフ入口へ</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>店舗が見つかりません</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 pb-28 lg:pb-0">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href={`/queue/${storeIdNum}`}>
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold">注文受付</h1>
-            <p className="text-sm text-muted-foreground">{store?.name ?? "店舗"}</p>
+    <div className="flex h-screen flex-col overflow-hidden bg-background">
+      {/* ヘッダー */}
+      <header className="shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="flex h-14 items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <Link href={`/queue/${storeIdNum}`}>
+              <Button variant="ghost" size="icon" aria-label="戻る">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            </Link>
+            <div className="leading-tight">
+              <div className="font-semibold">注文受付</div>
+              <div className="text-xs text-muted-foreground">{store.name}</div>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetchParties()}
+          >
+            再読込
+          </Button>
+        </div>
+      </header>
+
+      {/* メイン: PC=2カラム, スマホ=縦積み */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[320px_1fr] overflow-hidden">
+
+          {/* 左カラム */}
+          <div className="flex min-h-0 flex-col border-r bg-muted/10">
+            {/* 注文先選択（固定高さ） */}
+            <div className="shrink-0 p-4 space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">注文先</CardTitle>
+                  <CardDescription>誰の注文として登録しますか</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={partyMode === "existing" ? "default" : "outline"}
+                      onClick={() => setPartyMode("existing")}
+                    >
+                      既存受付
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={partyMode === "new" ? "default" : "outline"}
+                      onClick={() => setPartyMode("new")}
+                    >
+                      新規受付
+                    </Button>
+                  </div>
+
+                  {partyMode === "existing" ? (
+                    <div className="space-y-2">
+                      <Label>受付を選択</Label>
+                      <Select value={selectedPartyId} onValueChange={setSelectedPartyId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="受付を選択してください" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableParties.length === 0 && (
+                            <SelectItem value="no-parties" disabled>
+                              対象の受付がありません
+                            </SelectItem>
+                          )}
+                          {availableParties.map((party) => (
+                            <SelectItem key={party.id} value={party.id.toString()}>
+                              #{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="guestName">お名前（任意）</Label>
+                        <Input
+                          id="guestName"
+                          value={newPartyName}
+                          onChange={(event) => setNewPartyName(event.target.value)}
+                          placeholder="例: 山田様"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="partySize">人数</Label>
+                        <Input
+                          id="partySize"
+                          type="number"
+                          min={1}
+                          value={newPartySize}
+                          onChange={(event) => setNewPartySize(event.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* カート詳細（PCのみ・スクロール可能） */}
+            <div className="hidden lg:flex flex-1 min-h-0 flex-col px-4 pb-4">
+              <Card className="flex flex-1 min-h-0 flex-col">
+                <CardHeader className="shrink-0 pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    カート
+                    <Badge variant="outline">{totalItems}点</Badge>
+                  </CardTitle>
+                  <CardDescription>注文内容を確認</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 min-h-0 flex-col">
+                  <ScrollArea className="flex-1 min-h-0 pr-2">
+                    {cart.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground">
+                        カートは空です
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {cart.map((item) => (
+                          <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium line-clamp-1">{item.name}</p>
+                              <p className="text-sm text-primary font-bold">
+                                ¥{(item.price * item.quantity).toLocaleString()}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="w-8 h-8 rounded-full"
+                                onClick={() => {
+                                  if (item.quantity === 1) {
+                                    removeFromCart(item.menuItemId);
+                                  } else {
+                                    updateQuantity(item.menuItemId, -1);
+                                  }
+                                }}
+                              >
+                                {item.quantity === 1 ? (
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                ) : (
+                                  <Minus className="w-4 h-4" />
+                                )}
+                              </Button>
+                              <span className="w-8 text-center font-bold">{item.quantity}</span>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="w-8 h-8 rounded-full"
+                                onClick={() => updateQuantity(item.menuItemId, 1)}
+                              >
+                                <Plus className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+
+                  {cart.length > 0 && (
+                    <div className="shrink-0 pt-4 space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="orderNotes">備考（任意）</Label>
+                        <Textarea
+                          id="orderNotes"
+                          placeholder="アレルギーや特別なリクエストなど"
+                          value={notes}
+                          onChange={(event) => setNotes(event.target.value)}
+                          rows={2}
+                        />
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between text-sm font-medium">
+                        <span>小計</span>
+                        <span>¥{totalAmount.toLocaleString()}</span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={clearCart}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        カートをクリア
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* 右カラム */}
+          <div className="flex min-h-0 flex-col">
+            {/* カテゴリタブ（固定） */}
+            <div className="shrink-0 p-4 border-b">
+              <Tabs value={activeCategory} onValueChange={setActiveCategory}>
+                <ScrollArea className="w-full">
+                  <TabsList className="inline-flex h-auto p-1 bg-muted/50">
+                    <TabsTrigger
+                      value="all"
+                      className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+                    >
+                      すべて
+                    </TabsTrigger>
+                    {categories?.map((c) => (
+                      <TabsTrigger
+                        key={c.id}
+                        value={String(c.id)}
+                        className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+                      >
+                        {c.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </ScrollArea>
+              </Tabs>
+            </div>
+
+            {/* メニューグリッド（スクロール可能） */}
+            <ScrollArea className="flex-1 min-h-0">
+              <div className="p-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {filteredItems.map((item) => {
+                    const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
+                    const cartItem = cart.find((c) => c.menuItemId === item.id);
+                    return (
+                      <Card key={item.id} className={isSoldOut ? "opacity-60" : ""}>
+                        <CardContent className="p-4 flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium line-clamp-2">{item.name}</div>
+                            <div className="text-sm text-primary font-bold">
+                              ¥{Number(item.price).toLocaleString()}
+                            </div>
+                            {cartItem && (
+                              <Badge variant="secondary" className="mt-2">
+                                {cartItem.quantity}点
+                              </Badge>
+                            )}
+                          </div>
+                          {!cartItem ? (
+                            <Button
+                              className="h-12 px-6 shrink-0"
+                              onClick={() => addToCart(item)}
+                              disabled={isSoldOut}
+                            >
+                              <Plus className="w-4 h-4 mr-2" />
+                              追加
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-12 w-12 rounded-full"
+                                onClick={() => {
+                                  if (cartItem.quantity === 1) removeFromCart(cartItem.menuItemId);
+                                  else updateQuantity(cartItem.menuItemId, -1);
+                                }}
+                              >
+                                {cartItem.quantity === 1 ? (
+                                  <Trash2 className="h-5 w-5 text-red-500" />
+                                ) : (
+                                  <Minus className="h-5 w-5" />
+                                )}
+                              </Button>
+                              <div className="w-10 text-center font-bold text-lg">{cartItem.quantity}</div>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-12 w-12 rounded-full"
+                                onClick={() => updateQuantity(cartItem.menuItemId, 1)}
+                              >
+                                <Plus className="h-5 w-5" />
+                              </Button>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            </ScrollArea>
           </div>
         </div>
       </div>
 
-      <Card className="hidden lg:block lg:sticky lg:top-4 z-20 shadow-md">
-        <CardContent className="p-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-6">
-            <div>
-              <p className="text-sm text-muted-foreground">合計点数</p>
-              <p className="text-2xl font-bold">{totalItems}点</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">合計金額</p>
-              <p className="text-2xl font-bold text-primary">¥{totalAmount.toLocaleString()}</p>
-            </div>
-          </div>
-          <Button
-            size="lg"
-            className="h-12 px-8"
-            onClick={handleSubmitOrder}
-            disabled={!canSubmit || isSubmitting}
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                処理中...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="w-5 h-5 mr-2" />
-                注文確定
-              </>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <CartBuilder
-        categories={categories as Category[] | undefined}
-        items={items as MenuItem[] | undefined}
-        cart={cart}
-        totalAmount={totalAmount}
-        totalItems={totalItems}
-        notes={notes}
-        onNotesChange={setNotes}
-        onAddToCart={addToCart}
-        onUpdateQuantity={updateQuantity}
-        onRemoveFromCart={removeFromCart}
-        onClearCart={clearCart}
-        sidebarHeader={(
-          <Card>
-            <CardHeader>
-              <CardTitle>注文先</CardTitle>
-              <CardDescription>誰の注文として登録しますか</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ScrollArea>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant={partyMode === "existing" ? "default" : "outline"}
-                    onClick={() => setPartyMode("existing")}
-                  >
-                    既存受付
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={partyMode === "new" ? "default" : "outline"}
-                    onClick={() => setPartyMode("new")}
-                  >
-                    新規受付
-                  </Button>
-                </div>
-              </ScrollArea>
-
-              {partyMode === "existing" ? (
-                <div className="space-y-2">
-                  <Label>受付を選択</Label>
-                  <Select value={selectedPartyId} onValueChange={setSelectedPartyId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="受付を選択してください" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableParties.length === 0 && (
-                        <SelectItem value="no-parties" disabled>
-                          対象の受付がありません
-                        </SelectItem>
-                      )}
-                      {availableParties.map((party) => (
-                        <SelectItem key={party.id} value={party.id.toString()}>
-                          #{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="guestName">お名前（任意）</Label>
-                    <Input
-                      id="guestName"
-                      value={newPartyName}
-                      onChange={(event) => setNewPartyName(event.target.value)}
-                      placeholder="例: 山田様"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="partySize">人数</Label>
-                    <Input
-                      id="partySize"
-                      type="number"
-                      min={1}
-                      value={newPartySize}
-                      onChange={(event) => setNewPartySize(event.target.value)}
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-        sidebarFooter={(
-          <Card>
-            <CardHeader>
-              <CardTitle>会計対象</CardTitle>
-              <CardDescription>未精算の注文を選択して会計します</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>未精算注文</span>
-                <Badge variant="outline">{unpaidOrders.length}件</Badge>
-              </div>
-
-              {ordersLoading ? (
-                <div className="flex items-center justify-center py-6 text-muted-foreground">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                </div>
-              ) : unpaidOrders.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  未精算の注文はありません
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {unpaidOrders.map((order) => {
-                    const isSelected = selectedOrderIds.includes(order.id);
-                    const orderTotal = Number(order.totalAmount ?? 0);
-                    const partyLabel = order.party
-                      ? `${order.party.guestName ?? "お客様"} (${order.party.partySize}名)`
-                      : "お客様";
-
-                    return (
-                      <label
-                        key={order.id}
-                        className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/40"
-                      >
-                        <Checkbox
-                          className="mt-1"
-                          checked={isSelected}
-                          onCheckedChange={(checked) => {
-                            setSelectedOrderIds((current) => {
-                              if (checked) {
-                                return Array.from(new Set([...current, order.id]));
-                              }
-                              return current.filter((orderId) => orderId !== order.id);
-                            });
-                          }}
-                        />
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center justify-between gap-4">
-                            <div>
-                              <p className="text-sm text-muted-foreground">注文 #{order.orderNumber}</p>
-                              <p className="font-medium">{partyLabel}</p>
-                            </div>
-                            <Badge variant="secondary">未精算</Badge>
-                          </div>
-                          <div className="flex items-center justify-between text-sm text-muted-foreground">
-                            <span>{order.items?.length ?? 0}品</span>
-                            <span className="font-semibold text-foreground">
-                              ¥{orderTotal.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-
-              <Separator />
-
-              <div className="flex items-center justify-between text-sm font-medium">
-                <span>選択中合計</span>
-                <span>¥{selectedOrderTotal.toLocaleString()}</span>
-              </div>
-
-              <div className="space-y-2">
-                <Label>支払方法</Label>
-                <RadioGroup
-                  value={selectedPaymentMethod}
-                  onValueChange={setSelectedPaymentMethod}
-                  className="space-y-2"
-                >
-                  <label className="flex items-center gap-2 rounded-md border p-3">
-                    <RadioGroupItem value="cash" id="cashier-payment-cash" />
-                    <span className="text-sm font-medium">現金</span>
-                    <Badge variant="secondary" className="ml-auto">推奨</Badge>
-                  </label>
-                  <label className="flex items-center gap-2 rounded-md border p-3">
-                    <RadioGroupItem value="card" id="cashier-payment-card" />
-                    <span className="text-sm font-medium">クレジットカード</span>
-                  </label>
-                  <label className="flex items-center gap-2 rounded-md border p-3">
-                    <RadioGroupItem value="qr" id="cashier-payment-qr" />
-                    <span className="text-sm font-medium">QR決済</span>
-                  </label>
-                </RadioGroup>
-              </div>
-
-              {isCashPayment && (
-                <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="cashier-cash-received">受取金額</Label>
-                    <Input
-                      id="cashier-cash-received"
-                      type="number"
-                      min={0}
-                      value={cashReceived}
-                      onChange={(event) => setCashReceived(event.target.value)}
-                      placeholder="例: 5000"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">お釣り</span>
-                    <span className={`font-semibold ${changeAmount < 0 ? "text-destructive" : "text-foreground"}`}>
-                      {changeAmount >= 0
-                        ? `¥${changeAmount.toLocaleString()}`
-                        : `不足 ¥${Math.abs(changeAmount).toLocaleString()}`}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <Button
-                className="w-full"
-                onClick={handleConfirmPayment}
-                disabled={!canConfirmPayment || isPaymentSubmitting || ordersLoading}
-              >
-                {isPaymentSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    会計確定中...
-                  </>
-                ) : (
-                  "会計を確定"
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      />
-
+      {/* 下部固定バー */}
       <Sheet>
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden">
+        <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex items-center gap-3 px-4 py-3">
-            <SheetTrigger asChild>
-              <button type="button" className="flex flex-1 flex-col items-start gap-1 rounded-lg p-2 text-left hover:bg-muted/40">
+            {/* スマホ: カート概要（タップでSheet表示） */}
+            <SheetTrigger asChild className="lg:hidden flex-1">
+              <button
+                type="button"
+                className="flex flex-col items-start gap-1 rounded-lg p-2 text-left hover:bg-muted/40"
+              >
                 <span className="text-xs text-muted-foreground">タップしてカートを確認</span>
                 <span className="text-base font-bold">
                   {totalItems}点 · ¥{totalAmount.toLocaleString()}
                 </span>
               </button>
             </SheetTrigger>
+
+            {/* PC: 合計表示 */}
+            <div className="hidden lg:flex flex-1 items-center gap-4">
+              <span className="text-muted-foreground">合計</span>
+              <span className="text-xl font-bold">
+                {totalItems}点 · ¥{totalAmount.toLocaleString()}
+              </span>
+            </div>
+
             <Button
-              size="lg"
+              variant="outline"
+              className="h-12"
+              onClick={clearCart}
+              disabled={cart.length === 0 || isSubmitting}
+            >
+              クリア
+            </Button>
+            <Button
               className="h-12 px-6"
               onClick={handleSubmitOrder}
               disabled={!canSubmit || isSubmitting}
@@ -542,7 +538,7 @@ export default function Cashier() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  処理中
+                  処理中...
                 </>
               ) : (
                 <>
@@ -553,25 +549,92 @@ export default function Cashier() {
             </Button>
           </div>
         </div>
+
+        {/* スマホ用カート詳細Sheet */}
         <SheetContent side="bottom" className="h-[80vh] rounded-t-2xl px-0 pb-6">
-          <SheetHeader className="border-b">
+          <SheetHeader className="border-b px-4">
             <SheetTitle>カート</SheetTitle>
             <SheetDescription>注文内容を確認できます</SheetDescription>
           </SheetHeader>
-          <ScrollArea className="flex-1 px-4">
-            <CartDetailContent
-              cart={cart}
-              notes={notes}
-              totalAmount={totalAmount}
-              onNotesChange={setNotes}
-              onUpdateQuantity={updateQuantity}
-              onRemoveFromCart={removeFromCart}
-              onClearCart={clearCart}
-            />
+          <ScrollArea className="flex-1 h-full px-4 pt-4">
+            <div className="space-y-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  カートは空です
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {cart.map((item) => (
+                    <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium line-clamp-1">{item.name}</p>
+                        <p className="text-sm text-primary font-bold">
+                          ¥{(item.price * item.quantity).toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="w-8 h-8 rounded-full"
+                          onClick={() => {
+                            if (item.quantity === 1) {
+                              removeFromCart(item.menuItemId);
+                            } else {
+                              updateQuantity(item.menuItemId, -1);
+                            }
+                          }}
+                        >
+                          {item.quantity === 1 ? (
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                          ) : (
+                            <Minus className="w-4 h-4" />
+                          )}
+                        </Button>
+                        <span className="w-8 text-center font-bold">{item.quantity}</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="w-8 h-8 rounded-full"
+                          onClick={() => updateQuantity(item.menuItemId, 1)}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="pt-2 space-y-2">
+                    <Label htmlFor="orderNotesMobile">備考（任意）</Label>
+                    <Textarea
+                      id="orderNotesMobile"
+                      placeholder="アレルギーや特別なリクエストなど"
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between text-sm font-medium">
+                    <span>小計</span>
+                    <span>¥{totalAmount.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
+              {cart.length > 0 && (
+                <Button variant="outline" className="w-full" onClick={clearCart}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  カートをクリア
+                </Button>
+              )}
+            </div>
           </ScrollArea>
         </SheetContent>
       </Sheet>
-
     </div>
   );
 }
