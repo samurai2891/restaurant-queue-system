@@ -43,6 +43,13 @@
       "when": 1767871406883,
       "tag": "0005_opposite_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1767878117241,
+      "tag": "0006_colossal_infant_terrible",
+      "breakpoints": true
     }
   ]
 }
