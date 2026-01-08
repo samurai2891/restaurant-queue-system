@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,6 +16,7 @@ import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
   CheckCircle,
+  ChevronDown,
   Loader2,
   Minus,
   Plus,
@@ -45,6 +47,7 @@ export default function Cashier() {
   const [newPartySize, setNewPartySize] = useState("2");
   const [notes, setNotes] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [isOrderTargetExpanded, setIsOrderTargetExpanded] = useState(false);
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -86,6 +89,17 @@ export default function Cashier() {
       ) ?? [],
     [parties]
   );
+
+  const selectedPartyLabel = useMemo(() => {
+    if (partyMode === "existing") {
+      if (!selectedPartyId) return "未選択";
+      const party = availableParties.find((p) => p.id.toString() === selectedPartyId);
+      if (!party) return "未選択";
+      return `#${party.ticketNumber} ${party.guestName ?? "お客様"} (${party.partySize}名)`;
+    }
+    const name = newPartyName || "お客様";
+    return `${name} (${newPartySize}名)`;
+  }, [partyMode, selectedPartyId, availableParties, newPartyName, newPartySize]);
 
   const filteredItems = useMemo(() => {
     const list = (items as MenuItem[] | undefined) ?? [];
@@ -231,79 +245,176 @@ export default function Cashier() {
 
           {/* 左カラム */}
           <div className="flex min-h-0 flex-col border-r bg-muted/10">
-            {/* 注文先選択（固定高さ） */}
-            <div className="shrink-0 p-4 space-y-4">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">注文先</CardTitle>
-                  <CardDescription>誰の注文として登録しますか</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={partyMode === "existing" ? "default" : "outline"}
-                      onClick={() => setPartyMode("existing")}
-                    >
-                      既存受付
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={partyMode === "new" ? "default" : "outline"}
-                      onClick={() => setPartyMode("new")}
-                    >
-                      新規受付
-                    </Button>
-                  </div>
+            {/* 注文先選択 - スマホ: 折りたたみ可能 / PC: 常に展開 */}
+            <div className="shrink-0 p-3 lg:p-4 space-y-4">
+              {/* スマホ用: 折りたたみ可能なコンパクト表示 */}
+              <div className="lg:hidden">
+                <Collapsible open={isOrderTargetExpanded} onOpenChange={setIsOrderTargetExpanded}>
+                  <Card>
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="w-full text-left p-3 flex items-center justify-between hover:bg-muted/50 rounded-lg transition-colors"
+                      >
+                        <div className="space-y-0.5">
+                          <div className="text-xs text-muted-foreground font-medium">
+                            {partyMode === "existing" ? "既存受付" : "新規受付"}
+                          </div>
+                          <div className="font-semibold text-sm">{selectedPartyLabel}</div>
+                        </div>
+                        <ChevronDown
+                          className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
+                            isOrderTargetExpanded ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <CardContent className="pt-0 pb-3 space-y-3">
+                        <Separator />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={partyMode === "existing" ? "default" : "outline"}
+                            onClick={() => setPartyMode("existing")}
+                          >
+                            既存受付
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={partyMode === "new" ? "default" : "outline"}
+                            onClick={() => setPartyMode("new")}
+                          >
+                            新規受付
+                          </Button>
+                        </div>
 
-                  {partyMode === "existing" ? (
-                    <div className="space-y-2">
-                      <Label>受付を選択</Label>
-                      <Select value={selectedPartyId} onValueChange={setSelectedPartyId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="受付を選択してください" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableParties.length === 0 && (
-                            <SelectItem value="no-parties" disabled>
-                              対象の受付がありません
-                            </SelectItem>
-                          )}
-                          {availableParties.map((party) => (
-                            <SelectItem key={party.id} value={party.id.toString()}>
-                              #{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        {partyMode === "existing" ? (
+                          <div className="space-y-2">
+                            <Label>受付を選択</Label>
+                            <Select value={selectedPartyId} onValueChange={setSelectedPartyId}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="受付を選択してください" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableParties.length === 0 && (
+                                  <SelectItem value="no-parties" disabled>
+                                    対象の受付がありません
+                                  </SelectItem>
+                                )}
+                                {availableParties.map((party) => (
+                                  <SelectItem key={party.id} value={party.id.toString()}>
+                                    #{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              <Label htmlFor="guestNameMobile">お名前（任意）</Label>
+                              <Input
+                                id="guestNameMobile"
+                                value={newPartyName}
+                                onChange={(event) => setNewPartyName(event.target.value)}
+                                placeholder="例: 山田様"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="partySizeMobile">人数</Label>
+                              <Input
+                                id="partySizeMobile"
+                                type="number"
+                                min={1}
+                                value={newPartySize}
+                                onChange={(event) => setNewPartySize(event.target.value)}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              </div>
+
+              {/* PC用: 常に展開表示 */}
+              <div className="hidden lg:block">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">注文先</CardTitle>
+                    <CardDescription>誰の注文として登録しますか</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={partyMode === "existing" ? "default" : "outline"}
+                        onClick={() => setPartyMode("existing")}
+                      >
+                        既存受付
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={partyMode === "new" ? "default" : "outline"}
+                        onClick={() => setPartyMode("new")}
+                      >
+                        新規受付
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
+
+                    {partyMode === "existing" ? (
                       <div className="space-y-2">
-                        <Label htmlFor="guestName">お名前（任意）</Label>
-                        <Input
-                          id="guestName"
-                          value={newPartyName}
-                          onChange={(event) => setNewPartyName(event.target.value)}
-                          placeholder="例: 山田様"
-                        />
+                        <Label>受付を選択</Label>
+                        <Select value={selectedPartyId} onValueChange={setSelectedPartyId}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="受付を選択してください" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableParties.length === 0 && (
+                              <SelectItem value="no-parties" disabled>
+                                対象の受付がありません
+                              </SelectItem>
+                            )}
+                            {availableParties.map((party) => (
+                              <SelectItem key={party.id} value={party.id.toString()}>
+                                #{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="partySize">人数</Label>
-                        <Input
-                          id="partySize"
-                          type="number"
-                          min={1}
-                          value={newPartySize}
-                          onChange={(event) => setNewPartySize(event.target.value)}
-                        />
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="guestName">お名前（任意）</Label>
+                          <Input
+                            id="guestName"
+                            value={newPartyName}
+                            onChange={(event) => setNewPartyName(event.target.value)}
+                            placeholder="例: 山田様"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="partySize">人数</Label>
+                          <Input
+                            id="partySize"
+                            type="number"
+                            min={1}
+                            value={newPartySize}
+                            onChange={(event) => setNewPartySize(event.target.value)}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
             {/* カート詳細（PCのみ・スクロール可能） */}
@@ -403,14 +514,14 @@ export default function Cashier() {
 
           {/* 右カラム */}
           <div className="flex min-h-0 flex-col">
-            {/* カテゴリタブ（固定） */}
-            <div className="shrink-0 p-4 border-b">
+            {/* カテゴリタブ（スティッキー） */}
+            <div className="shrink-0 p-2 lg:p-4 border-b sticky top-0 z-10 bg-background">
               <Tabs value={activeCategory} onValueChange={setActiveCategory}>
                 <ScrollArea className="w-full">
                   <TabsList className="inline-flex h-auto p-1 bg-muted/50">
                     <TabsTrigger
                       value="all"
-                      className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+                      className="rounded-full px-3 py-2 lg:px-5 lg:py-3 text-sm whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
                     >
                       すべて
                     </TabsTrigger>
@@ -418,7 +529,7 @@ export default function Cashier() {
                       <TabsTrigger
                         key={c.id}
                         value={String(c.id)}
-                        className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
+                        className="rounded-full px-3 py-2 lg:px-5 lg:py-3 text-sm whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
                       >
                         {c.name}
                       </TabsTrigger>
@@ -430,8 +541,8 @@ export default function Cashier() {
 
             {/* メニューグリッド（スクロール可能） */}
             <ScrollArea className="flex-1 min-h-0">
-              <div className="p-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="p-2 lg:p-4">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4 lg:gap-3">
                   {filteredItems.map((item) => {
                     const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
                     const cartItem = cart.find((c) => c.menuItemId === item.id);
@@ -451,24 +562,24 @@ export default function Cashier() {
                         <Card
                           className={`h-full transition-all duration-200 ${
                             isSoldOut ? "opacity-60" : "hover:shadow-md"
-                          } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                          } ${inCart ? "ring-2 ring-primary ring-offset-1 lg:ring-offset-2" : ""}`}
                         >
-                          <CardContent className="p-4 flex flex-col gap-3">
-                            <div className="space-y-1">
-                              <div className="font-semibold line-clamp-2">{item.name}</div>
-                              <div className="text-lg text-primary font-bold">
+                          <CardContent className="p-2 lg:p-4 flex flex-col gap-2 lg:gap-3">
+                            <div className="space-y-0.5 lg:space-y-1">
+                              <div className="font-semibold text-sm lg:text-base line-clamp-2">{item.name}</div>
+                              <div className="text-base lg:text-lg text-primary font-bold">
                                 ¥{Number(item.price).toLocaleString()}
                               </div>
                               {isSoldOut && (
-                                <Badge variant="secondary">売切れ</Badge>
+                                <Badge variant="secondary" className="text-xs">売切れ</Badge>
                               )}
                             </div>
                             {cartItem && (
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                              <div className="flex items-center justify-between gap-1 lg:gap-2 pt-2 border-t">
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-10 w-10 rounded-full"
+                                  className="h-8 w-8 lg:h-10 lg:w-10 rounded-full"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (cartItem.quantity === 1) removeFromCart(cartItem.menuItemId);
@@ -476,22 +587,22 @@ export default function Cashier() {
                                   }}
                                 >
                                   {cartItem.quantity === 1 ? (
-                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                    <Trash2 className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-red-500" />
                                   ) : (
-                                    <Minus className="h-4 w-4" />
+                                    <Minus className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                                   )}
                                 </Button>
-                                <div className="text-center font-bold text-lg">{cartItem.quantity}点</div>
+                                <div className="text-center font-bold text-base lg:text-lg">{cartItem.quantity}点</div>
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-10 w-10 rounded-full"
+                                  className="h-8 w-8 lg:h-10 lg:w-10 rounded-full"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     updateQuantity(cartItem.menuItemId, 1);
                                   }}
                                 >
-                                  <Plus className="h-4 w-4" />
+                                  <Plus className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                                 </Button>
                               </div>
                             )}
