@@ -435,59 +435,69 @@ export default function Cashier() {
                   {filteredItems.map((item) => {
                     const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
                     const cartItem = cart.find((c) => c.menuItemId === item.id);
+                    const inCart = Boolean(cartItem);
                     return (
-                      <Card key={item.id} className={isSoldOut ? "opacity-60" : ""}>
-                        <CardContent className="p-4 flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium line-clamp-2">{item.name}</div>
-                            <div className="text-sm text-primary font-bold">
-                              ¥{Number(item.price).toLocaleString()}
+                      <button
+                        key={item.id}
+                        type="button"
+                        className="text-left"
+                        onClick={() => {
+                          if (!isSoldOut && !inCart) {
+                            addToCart(item);
+                          }
+                        }}
+                        disabled={isSoldOut && !inCart}
+                      >
+                        <Card
+                          className={`h-full transition-all duration-200 ${
+                            isSoldOut ? "opacity-60" : "hover:shadow-md"
+                          } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
+                        >
+                          <CardContent className="p-4 flex flex-col gap-3">
+                            <div className="space-y-1">
+                              <div className="font-semibold line-clamp-2">{item.name}</div>
+                              <div className="text-lg text-primary font-bold">
+                                ¥{Number(item.price).toLocaleString()}
+                              </div>
+                              {isSoldOut && (
+                                <Badge variant="secondary">売切れ</Badge>
+                              )}
                             </div>
                             {cartItem && (
-                              <Badge variant="secondary" className="mt-2">
-                                {cartItem.quantity}点
-                              </Badge>
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-10 w-10 rounded-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (cartItem.quantity === 1) removeFromCart(cartItem.menuItemId);
+                                    else updateQuantity(cartItem.menuItemId, -1);
+                                  }}
+                                >
+                                  {cartItem.quantity === 1 ? (
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  ) : (
+                                    <Minus className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <div className="text-center font-bold text-lg">{cartItem.quantity}点</div>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-10 w-10 rounded-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateQuantity(cartItem.menuItemId, 1);
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
                             )}
-                          </div>
-                          {!cartItem ? (
-                            <Button
-                              className="h-12 px-6 shrink-0"
-                              onClick={() => addToCart(item)}
-                              disabled={isSoldOut}
-                            >
-                              <Plus className="w-4 h-4 mr-2" />
-                              追加
-                            </Button>
-                          ) : (
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-12 w-12 rounded-full"
-                                onClick={() => {
-                                  if (cartItem.quantity === 1) removeFromCart(cartItem.menuItemId);
-                                  else updateQuantity(cartItem.menuItemId, -1);
-                                }}
-                              >
-                                {cartItem.quantity === 1 ? (
-                                  <Trash2 className="h-5 w-5 text-red-500" />
-                                ) : (
-                                  <Minus className="h-5 w-5" />
-                                )}
-                              </Button>
-                              <div className="w-10 text-center font-bold text-lg">{cartItem.quantity}</div>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-12 w-12 rounded-full"
-                                onClick={() => updateQuantity(cartItem.menuItemId, 1)}
-                              >
-                                <Plus className="h-5 w-5" />
-                              </Button>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
+                          </CardContent>
+                        </Card>
+                      </button>
                     );
                   })}
                 </div>
