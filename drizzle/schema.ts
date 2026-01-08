@@ -255,6 +255,7 @@ export const menuItems = mysqlTable("menu_items", {
   name: varchar("name", { length: 200 }).notNull(),
   description: text("description"),
   price: decimal("price", { precision: 10, scale: 0 }).notNull(),
+  costPrice: decimal("costPrice", { precision: 10, scale: 0 }), // 原価（nullの場合は原価率計算不可）
   imageUrl: text("imageUrl"),
   // 在庫管理
   isAvailable: boolean("isAvailable").default(true).notNull(),
