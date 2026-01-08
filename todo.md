@@ -169,3 +169,13 @@
 - [x] /register/1ページで再発していた「本日のレジセッションは既に締め済みです」エラーを修正
 - [x] getCurrentSessionクエリをgetCurrentRegisterSession関数を使用するように修正（最新の開いているセッションを返す）
 - [x] 複数シフト対応を完全に実装（同じ日に複数のセッションを作成・管理可能）
+
+
+## バグ修正（2026-01-09 - KitchenDisplay TypeScriptエラー）
+- [x] KitchenDisplay.tsxで発生していたTypeScriptエラーを修正（order.list APIの返り値とKitchenOrder型の不一致）
+- [x] KitchenOrder型定義をサーバーの実際の返り値に合わせて拡張（storeId, partyId, routeToKitchen等のオプショナルフィールド追加）
+- [x] orderedAtフィールドの型をstring | Dateに修正し、getElapsedMinutes関数に型ガード追加
+- [x] ToppingDialog.tsxのMenuModifier型定義をnull許容に修正（price, isRequired, maxSelections）
+- [x] toggleModifier関数でpriceがnullの場合に0として扱うように修正
+- [x] 全26件のテスト通過、TypeScriptエラーなし
+- [x] キッチンディスプレイ画面の動作確認完了（正常に表示）
