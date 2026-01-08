@@ -402,3 +402,35 @@ export const dailyAnalytics = mysqlTable("daily_analytics", {
 
 export type DailyAnalytics = typeof dailyAnalytics.$inferSelect;
 export type InsertDailyAnalytics = typeof dailyAnalytics.$inferInsert;
+
+// ============================================
+// Register Session (レジセッション - 日次現金管理)
+// ============================================
+export const registerSessions = mysqlTable("register_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  storeId: int("storeId").notNull(),
+  sessionDate: varchar("sessionDate", { length: 10 }).notNull(), // YYYY-MM-DD
+  status: mysqlEnum("status", ["open", "closed"]).default("open").notNull(),
+  // 開店入金
+  openingCash: decimal("openingCash", { precision: 10, scale: 0 }).default("0"),
+  openedByStaffId: int("openedByStaffId"),
+  openedAt: timestamp("openedAt").defaultNow().notNull(),
+  // レジ締め
+  closingCash: decimal("closingCash", { precision: 10, scale: 0 }),
+  expectedCash: decimal("expectedCash", { precision: 10, scale: 0 }),
+  cashDifference: decimal("cashDifference", { precision: 10, scale: 0 }),
+  closedByStaffId: int("closedByStaffId"),
+  closedAt: timestamp("closedAt"),
+  // 売上集計
+  totalSales: decimal("totalSales", { precision: 12, scale: 0 }).default("0"),
+  cashSales: decimal("cashSales", { precision: 12, scale: 0 }).default("0"),
+  cardSales: decimal("cardSales", { precision: 12, scale: 0 }).default("0"),
+  otherSales: decimal("otherSales", { precision: 12, scale: 0 }).default("0"),
+  totalTransactions: int("totalTransactions").default(0),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RegisterSession = typeof registerSessions.$inferSelect;
+export type InsertRegisterSession = typeof registerSessions.$inferInsert;

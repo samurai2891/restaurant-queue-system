@@ -15,7 +15,8 @@ import {
   orders, InsertOrder,
   orderItems, InsertOrderItem,
   subscriptions, InsertSubscription,
-  dailyAnalytics, InsertDailyAnalytics
+  dailyAnalytics, InsertDailyAnalytics,
+  registerSessions, InsertRegisterSession
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { nanoid } from 'nanoid';
@@ -1407,4 +1408,76 @@ export async function getSalesByCategory(
   }
 
   return Array.from(categoryMap.values());
+}
+
+// ============================================
+// Register Session Functions
+// ============================================
+export async function createRegisterSession(data: InsertRegisterSession) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(registerSessions).values(data);
+  return result[0].insertId;
+}
+
+export async function getRegisterSessionById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(registerSessions).where(eq(registerSessions.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getRegisterSessionByStoreAndDate(storeId: number, sessionDate: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(registerSessions)
+    .where(and(
+      eq(registerSessions.storeId, storeId),
+      eq(registerSessions.sessionDate, sessionDate)
+    ))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getCurrentRegisterSession(storeId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  // Get the most recent open session for this store
+  const result = await db.select().from(registerSessions)
+    .where(and(
+      eq(registerSessions.storeId, storeId),
+      eq(registerSessions.status, "open")
+    ))
+    .orderBy(desc(registerSessions.openedAt))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateRegisterSession(id: number, data: Partial<InsertRegisterSession>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(registerSessions).set(data).where(eq(registerSessions.id, id));
+}
+
+export async function getPaidOrdersForSession(storeId: number, startDate: Date, endDate: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(orders)
+    .where(and(
+      eq(orders.storeId, storeId),
+      eq(orders.paymentStatus, "paid"),
+      gte(orders.paidAt, startDate),
+      lt(orders.paidAt, endDate)
+    ))
+    .orderBy(desc(orders.paidAt));
+}
+
+export async function getRegisterSessionHistory(storeId: number, limit: number = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(registerSessions)
+    .where(eq(registerSessions.storeId, storeId))
+    .orderBy(desc(registerSessions.sessionDate))
+    .limit(limit);
 }
