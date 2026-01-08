@@ -1070,3 +1070,343 @@ export async function calculateEstimatedWaitTime(storeId: number, seatTypeId: nu
   
   return Math.ceil((partiesAhead / Math.max(availableSeats, 1)) * avgTurnover);
 }
+
+// ============================================
+// Sales Analytics Functions
+// ============================================
+
+export type SalesDailySummaryRow = {
+  date: string;
+  dayOfWeek: string;
+  totalSales: number;
+  orderCount: number;
+  avgOrderAmount: number;
+  guestCount: number;
+  avgPerGuest: number;
+  itemCount: number;
+  cashSales: number;
+  otherSales: number;
+  discountAmount: number;
+};
+
+/**
+ * 日別売上サマリーを取得（グラフ・テーブル用）
+ */
+export async function getSalesDailySummary(
+  storeId: number,
+  startDate: string,
+  endDate: string
+): Promise<SalesDailySummaryRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  // 支払済みの注文を日別に集計
+  const rawRows = await db.execute<{
+    date: string;
+    totalSales: string | number;
+    orderCount: string | number;
+    cashSales: string | number;
+    otherSales: string | number;
+  }>(sql`
+    SELECT
+      DATE(${orders.paidAt}) as date,
+      COALESCE(SUM(${orders.totalAmount}), 0) as totalSales,
+      COUNT(DISTINCT ${orders.id}) as orderCount,
+      COALESCE(SUM(CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END), 0) as cashSales,
+      COALESCE(SUM(CASE WHEN ${orders.paymentMethod} != 'cash' OR ${orders.paymentMethod} IS NULL THEN ${orders.totalAmount} ELSE 0 END), 0) as otherSales
+    FROM ${orders}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND ${orders.paidAt} >= ${startDate}
+      AND ${orders.paidAt} < DATE_ADD(${endDate}, INTERVAL 1 DAY)
+    GROUP BY DATE(${orders.paidAt})
+    ORDER BY date ASC
+  `);
+
+  const rows: Array<{
+    date: string;
+    totalSales: string | number;
+    orderCount: string | number;
+    cashSales: string | number;
+    otherSales: string | number;
+  }> = Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || [];
+
+  // 商品数を取得
+  const itemCountRows = await db.execute<{
+    date: string;
+    itemCount: string | number;
+  }>(sql`
+    SELECT
+      DATE(${orders.paidAt}) as date,
+      COALESCE(SUM(${orderItems.quantity}), 0) as itemCount
+    FROM ${orderItems}
+    INNER JOIN ${orders} ON ${orderItems.orderId} = ${orders.id}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND ${orders.paidAt} >= ${startDate}
+      AND ${orders.paidAt} < DATE_ADD(${endDate}, INTERVAL 1 DAY)
+    GROUP BY DATE(${orders.paidAt})
+  `);
+
+  const itemRows: Array<{ date: string; itemCount: string | number }> = 
+    Array.isArray(itemCountRows) ? itemCountRows : (itemCountRows as { rows?: unknown[] }).rows || [];
+  const itemCountMap = new Map(itemRows.map(r => [r.date, Number(r.itemCount)]));
+
+  // 客数を取得（partySize合計）
+  const guestCountRows = await db.execute<{
+    date: string;
+    guestCount: string | number;
+  }>(sql`
+    SELECT
+      DATE(${orders.paidAt}) as date,
+      COALESCE(SUM(${parties.partySize}), 0) as guestCount
+    FROM ${orders}
+    INNER JOIN ${parties} ON ${orders.partyId} = ${parties.id}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND ${orders.paidAt} >= ${startDate}
+      AND ${orders.paidAt} < DATE_ADD(${endDate}, INTERVAL 1 DAY)
+    GROUP BY DATE(${orders.paidAt})
+  `);
+
+  const guestRows: Array<{ date: string; guestCount: string | number }> = 
+    Array.isArray(guestCountRows) ? guestCountRows : (guestCountRows as { rows?: unknown[] }).rows || [];
+  const guestCountMap = new Map(guestRows.map(r => [r.date, Number(r.guestCount)]));
+
+  const dayOfWeekNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+  return rows.map(row => {
+    const dateStr = String(row.date).split('T')[0];
+    const dateObj = new Date(dateStr + 'T00:00:00');
+    const totalSales = Number(row.totalSales);
+    const orderCount = Number(row.orderCount);
+    const guestCount = guestCountMap.get(dateStr) ?? 0;
+    const itemCount = itemCountMap.get(dateStr) ?? 0;
+
+    return {
+      date: dateStr,
+      dayOfWeek: dayOfWeekNames[dateObj.getDay()],
+      totalSales,
+      orderCount,
+      avgOrderAmount: orderCount > 0 ? Math.round(totalSales / orderCount) : 0,
+      guestCount,
+      avgPerGuest: guestCount > 0 ? Math.round(totalSales / guestCount) : 0,
+      itemCount,
+      cashSales: Number(row.cashSales),
+      otherSales: Number(row.otherSales),
+      discountAmount: 0, // 現状割引機能はないため0
+    };
+  });
+}
+
+export type SalesDailyDetailResult = {
+  // 売上基本情報
+  totalSales: number;
+  cashSales: number;
+  otherSales: number;
+  taxAmount: number;
+  discountAmount: number;
+  // 分析情報
+  orderCount: number;
+  avgOrderAmount: number;
+  guestCount: number;
+  avgPerGuest: number;
+  itemCount: number;
+  costTotal: number;
+  costRate: number;
+  grossProfit: number;
+  grossProfitRate: number;
+};
+
+/**
+ * 特定日の売上詳細を取得
+ */
+export async function getSalesDailyDetail(
+  storeId: number,
+  date: string
+): Promise<SalesDailyDetailResult> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      totalSales: 0, cashSales: 0, otherSales: 0, taxAmount: 0, discountAmount: 0,
+      orderCount: 0, avgOrderAmount: 0, guestCount: 0, avgPerGuest: 0,
+      itemCount: 0, costTotal: 0, costRate: 0, grossProfit: 0, grossProfitRate: 0,
+    };
+  }
+
+  // 基本売上データ
+  const salesRows = await db.execute<{
+    totalSales: string | number;
+    orderCount: string | number;
+    cashSales: string | number;
+    otherSales: string | number;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(${orders.totalAmount}), 0) as totalSales,
+      COUNT(DISTINCT ${orders.id}) as orderCount,
+      COALESCE(SUM(CASE WHEN ${orders.paymentMethod} = 'cash' THEN ${orders.totalAmount} ELSE 0 END), 0) as cashSales,
+      COALESCE(SUM(CASE WHEN ${orders.paymentMethod} != 'cash' OR ${orders.paymentMethod} IS NULL THEN ${orders.totalAmount} ELSE 0 END), 0) as otherSales
+    FROM ${orders}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND DATE(${orders.paidAt}) = ${date}
+  `);
+
+  const salesData = Array.isArray(salesRows) ? salesRows[0] : ((salesRows as { rows?: unknown[] }).rows || [])[0];
+  const totalSales = Number(salesData?.totalSales ?? 0);
+  const orderCount = Number(salesData?.orderCount ?? 0);
+  const cashSales = Number(salesData?.cashSales ?? 0);
+  const otherSales = Number(salesData?.otherSales ?? 0);
+
+  // 客数
+  const guestRows = await db.execute<{ guestCount: string | number }>(sql`
+    SELECT COALESCE(SUM(${parties.partySize}), 0) as guestCount
+    FROM ${orders}
+    INNER JOIN ${parties} ON ${orders.partyId} = ${parties.id}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND DATE(${orders.paidAt}) = ${date}
+  `);
+  const guestData = Array.isArray(guestRows) ? guestRows[0] : ((guestRows as { rows?: unknown[] }).rows || [])[0];
+  const guestCount = Number(guestData?.guestCount ?? 0);
+
+  // 商品数と原価
+  const itemRows = await db.execute<{
+    itemCount: string | number;
+    costTotal: string | number;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(${orderItems.quantity}), 0) as itemCount,
+      COALESCE(SUM(${orderItems.quantity} * COALESCE(${menuItems.costPrice}, 0)), 0) as costTotal
+    FROM ${orderItems}
+    INNER JOIN ${orders} ON ${orderItems.orderId} = ${orders.id}
+    LEFT JOIN ${menuItems} ON ${orderItems.menuItemId} = ${menuItems.id}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND DATE(${orders.paidAt}) = ${date}
+  `);
+  const itemData = Array.isArray(itemRows) ? itemRows[0] : ((itemRows as { rows?: unknown[] }).rows || [])[0];
+  const itemCount = Number(itemData?.itemCount ?? 0);
+  const costTotal = Number(itemData?.costTotal ?? 0);
+
+  // 税額（10%で計算）
+  const taxRate = 0.1;
+  const taxAmount = Math.round(totalSales * taxRate / (1 + taxRate));
+
+  // 粗利計算
+  const grossProfit = totalSales - costTotal;
+  const costRate = totalSales > 0 ? Math.round((costTotal / totalSales) * 100) : 0;
+  const grossProfitRate = totalSales > 0 ? Math.round((grossProfit / totalSales) * 100) : 0;
+
+  return {
+    totalSales,
+    cashSales,
+    otherSales,
+    taxAmount,
+    discountAmount: 0,
+    orderCount,
+    avgOrderAmount: orderCount > 0 ? Math.round(totalSales / orderCount) : 0,
+    guestCount,
+    avgPerGuest: guestCount > 0 ? Math.round(totalSales / guestCount) : 0,
+    itemCount,
+    costTotal,
+    costRate,
+    grossProfit,
+    grossProfitRate,
+  };
+}
+
+export type SalesByCategoryItem = {
+  menuItemId: number;
+  menuItemName: string;
+  quantity: number;
+  totalAmount: number;
+};
+
+export type SalesByCategoryRow = {
+  categoryId: number;
+  categoryName: string;
+  quantity: number;
+  totalAmount: number;
+  items: SalesByCategoryItem[];
+};
+
+/**
+ * カテゴリー別売上を取得
+ */
+export async function getSalesByCategory(
+  storeId: number,
+  date: string
+): Promise<SalesByCategoryRow[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  // カテゴリー別・商品別の集計
+  const rawRows = await db.execute<{
+    categoryId: number;
+    categoryName: string;
+    menuItemId: number;
+    menuItemName: string;
+    quantity: string | number;
+    totalAmount: string | number;
+  }>(sql`
+    SELECT
+      ${menuCategories.id} as categoryId,
+      ${menuCategories.name} as categoryName,
+      ${menuItems.id} as menuItemId,
+      ${menuItems.name} as menuItemName,
+      COALESCE(SUM(${orderItems.quantity}), 0) as quantity,
+      COALESCE(SUM(${orderItems.subtotal}), 0) as totalAmount
+    FROM ${orderItems}
+    INNER JOIN ${orders} ON ${orderItems.orderId} = ${orders.id}
+    INNER JOIN ${menuItems} ON ${orderItems.menuItemId} = ${menuItems.id}
+    INNER JOIN ${menuCategories} ON ${menuItems.categoryId} = ${menuCategories.id}
+    WHERE ${orders.storeId} = ${storeId}
+      AND ${orders.paymentStatus} = 'paid'
+      AND DATE(${orders.paidAt}) = ${date}
+    GROUP BY ${menuCategories.id}, ${menuCategories.name}, ${menuItems.id}, ${menuItems.name}
+    ORDER BY ${menuCategories.sortOrder}, ${menuCategories.name}, ${menuItems.sortOrder}, ${menuItems.name}
+  `);
+
+  const rows: Array<{
+    categoryId: number;
+    categoryName: string;
+    menuItemId: number;
+    menuItemName: string;
+    quantity: string | number;
+    totalAmount: string | number;
+  }> = Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || [];
+
+  // カテゴリーごとにグループ化
+  const categoryMap = new Map<number, SalesByCategoryRow>();
+
+  for (const row of rows) {
+    const categoryId = row.categoryId;
+    let category = categoryMap.get(categoryId);
+
+    if (!category) {
+      category = {
+        categoryId,
+        categoryName: row.categoryName,
+        quantity: 0,
+        totalAmount: 0,
+        items: [],
+      };
+      categoryMap.set(categoryId, category);
+    }
+
+    const quantity = Number(row.quantity);
+    const totalAmount = Number(row.totalAmount);
+
+    category.quantity += quantity;
+    category.totalAmount += totalAmount;
+    category.items.push({
+      menuItemId: row.menuItemId,
+      menuItemName: row.menuItemName,
+      quantity,
+      totalAmount,
+    });
+  }
+
+  return Array.from(categoryMap.values());
+}

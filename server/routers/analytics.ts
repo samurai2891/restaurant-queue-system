@@ -84,4 +84,42 @@ export const analyticsRouter = router({
       await checkStoreAccess(ctx.user.id, input.storeId);
       return db.getWaitTimeStatsByHour(input.storeId, input.startDate, input.endDate);
     }),
+
+  // ============================================
+  // 売上分析
+  // ============================================
+
+  // 日別売上サマリー（グラフ・テーブル用）
+  salesDailySummary: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      startDate: z.string(),
+      endDate: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+      return db.getSalesDailySummary(input.storeId, input.startDate, input.endDate);
+    }),
+
+  // 特定日の売上詳細
+  salesDailyDetail: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      date: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+      return db.getSalesDailyDetail(input.storeId, input.date);
+    }),
+
+  // カテゴリー別売上
+  salesByCategory: protectedProcedure
+    .input(z.object({
+      storeId: z.number(),
+      date: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+      return db.getSalesByCategory(input.storeId, input.date);
+    }),
 });
