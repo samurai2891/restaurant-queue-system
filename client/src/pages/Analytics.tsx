@@ -147,22 +147,22 @@ export default function Analytics() {
   };
 
   const waitTimeByHour = useMemo(() => {
-    if (!waitTimeStats) {
+    if (!waitTimeStats || waitTimeStats.length === 0) {
       return { data: [], seatTypeNames: [] as string[] };
     }
     const seatTypeNames = new Set<string>();
     const grouped = new Map<number, Record<string, number | string>>();
     waitTimeStats.forEach((stat) => {
-      const seatTypeName = stat.seatTypeName ?? "未指定";
+      const seatTypeName = stat.seatTypeName && stat.seatTypeName.trim() ? stat.seatTypeName : "未指定";
       seatTypeNames.add(seatTypeName);
       const entry = grouped.get(stat.hour) ?? { hour: stat.hour, hourLabel: `${stat.hour}:00` };
-      entry[seatTypeName] = stat[waitTimeMetric];
+      entry[seatTypeName] = stat[waitTimeMetric] ?? 0;
       grouped.set(stat.hour, entry);
     });
     const data = Array.from(grouped.values()).sort((a, b) => Number(a.hour) - Number(b.hour));
     return {
       data,
-      seatTypeNames: Array.from(seatTypeNames).sort((a, b) => a.localeCompare(b, "ja")),
+      seatTypeNames: Array.from(seatTypeNames).filter(name => name).sort((a, b) => a.localeCompare(b, "ja")),
     };
   }, [waitTimeStats, waitTimeMetric]);
 
@@ -181,19 +181,19 @@ export default function Analytics() {
   ], []);
 
   const stats = useMemo(() => analytics ? {
-    totalParties: analytics.totalParties,
-    seatedRate: analytics.totalParties > 0 ? (analytics.seatedCount / analytics.totalParties * 100).toFixed(1) : 0,
-    avgWaitTime: analytics.avgWaitTime,
-    noshowRate: analytics.totalParties > 0 ? (analytics.noshowCount / analytics.totalParties * 100).toFixed(1) : 0,
-    notificationResponseRate: 87.2,
+    totalParties: analytics.totalParties ?? 0,
+    seatedRate: analytics.totalParties > 0 ? (analytics.seatedCount / analytics.totalParties * 100).toFixed(1) : '0',
+    avgWaitTime: analytics.avgWaitTime ?? 0,
+    noshowRate: analytics.totalParties > 0 ? (analytics.noshowCount / analytics.totalParties * 100).toFixed(1) : '0',
+    notificationResponseRate: '87.2',
     avgTurnoverTime: 45,
   } : {
-    totalParties: 341,
-    seatedRate: 92.4,
-    avgWaitTime: 23,
-    noshowRate: 5.3,
-    notificationResponseRate: 87.2,
-    avgTurnoverTime: 45,
+    totalParties: 0,
+    seatedRate: '0',
+    avgWaitTime: 0,
+    noshowRate: '0',
+    notificationResponseRate: '0',
+    avgTurnoverTime: 0,
   }, [analytics]);
 
   // 売上グラフ用データ

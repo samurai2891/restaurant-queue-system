@@ -145,3 +145,9 @@
 - [x] GitHubリポジトリから最新変更をプル（Register.tsx AirPay風リファクタリング、RBAC調整、新テストケース追加）
 - [x] リモート変更で再発したTypeScriptエラーを修正（party.ts PartyRow型定義、ticket.ts null値処理）
 - [x] 全26件のテスト通過、TypeScriptエラーなし
+
+
+## バグ修正（2026-01-08 - Analyticsページ）
+- [x] /analytics/1ページで発生していた「重複したkey（undefined）」警告を修正（seatTypeNameのバリデーション強化、filterで空値除外）
+- [x] NaN値が表示される問題を修正（statsのデフォルト値を適切な型に統一、??演算子でnull/undefined対策）
+- [x] waitTimeByHourのseatTypeNamesに空値が含まれないように修正
