@@ -1,4 +1,4 @@
-﻿import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,8 +6,8 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { MenuImage } from "@/components/MenuImage";
 import type { CartItem, MenuItem } from "@/hooks/useMenuCart";
-import { filterMenuItems } from "@/lib/menuFilter";
 import { Minus, Plus, Search, Trash2, UtensilsCrossed } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -39,7 +39,7 @@ export const CartDetailContent = ({
   <div className="space-y-4">
     {cart.length === 0 ? (
       <div className="text-center py-6 text-muted-foreground">
-        繧ｫ繝ｼ繝医・遨ｺ縺ｧ縺・
+        カートは空です
       </div>
     ) : (
       <div className="space-y-3">
@@ -48,7 +48,7 @@ export const CartDetailContent = ({
             <div className="flex-1 min-w-0">
               <p className="font-medium line-clamp-1">{item.name}</p>
               <p className="text-sm text-primary font-bold">
-                ﾂ･{(item.price * item.quantity).toLocaleString()}
+                ¥{(item.price * item.quantity).toLocaleString()}
               </p>
             </div>
 
@@ -85,10 +85,10 @@ export const CartDetailContent = ({
         ))}
 
         <div className="pt-2 space-y-2">
-          <Label htmlFor="orderNotes">蛯呵・ｼ井ｻｻ諢擾ｼ・/Label>
+          <Label htmlFor="orderNotes">備考（任意）</Label>
           <Textarea
             id="orderNotes"
-            placeholder="繧｢繝ｬ繝ｫ繧ｮ繝ｼ繧・音蛻･縺ｪ繝ｪ繧ｯ繧ｨ繧ｹ繝医↑縺ｩ"
+            placeholder="アレルギーや特別なリクエストなど"
             value={notes}
             onChange={(event) => onNotesChange(event.target.value)}
             rows={3}
@@ -96,8 +96,8 @@ export const CartDetailContent = ({
         </div>
 
         <div className="flex items-center justify-between pt-2 text-sm font-medium">
-          <span>蟆剰ｨ・/span>
-          <span>ﾂ･{totalAmount.toLocaleString()}</span>
+          <span>小計</span>
+          <span>¥{totalAmount.toLocaleString()}</span>
         </div>
       </div>
     )}
@@ -105,7 +105,7 @@ export const CartDetailContent = ({
     {cart.length > 0 && (
       <Button variant="outline" className="w-full" onClick={onClearCart}>
         <Trash2 className="w-4 h-4 mr-2" />
-        繧ｫ繝ｼ繝医ｒ繧ｯ繝ｪ繧｢
+        カートをクリア
       </Button>
     )}
   </div>
@@ -144,18 +144,27 @@ export const CartBuilder = ({
 }: CartBuilderProps) => {
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const filteredItems = useMemo(
-    () => filterMenuItems(items, { categoryId: activeCategory, searchQuery }),
-    [activeCategory, items, searchQuery]
-  );
+
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    let results = items;
+    if (activeCategory !== "all") {
+      results = results.filter((item) => item.categoryId === parseInt(activeCategory, 10));
+    }
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      results = results.filter((item) => item.name.toLowerCase().includes(query));
+    }
+    return results;
+  }, [activeCategory, items, searchQuery]);
 
   return (
     <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[220px_1fr_320px]">
       <div className="space-y-4">
         <Card className="lg:sticky lg:top-4">
           <CardHeader className="pb-2">
-            <CardTitle>繧ｫ繝・ざ繝ｪ</CardTitle>
-            <CardDescription>POS繝｡繝九Η繝ｼ縺ｮ邨槭ｊ霎ｼ縺ｿ</CardDescription>
+            <CardTitle>カテゴリ</CardTitle>
+            <CardDescription>POSメニューの絞り込み</CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="max-h-[60vh] pr-3">
@@ -165,7 +174,7 @@ export const CartBuilder = ({
                   className="w-full justify-start"
                   onClick={() => setActiveCategory("all")}
                 >
-                  縺吶∋縺ｦ
+                  すべて
                 </Button>
                 {categories?.map((category) => (
                   <Button
@@ -184,8 +193,8 @@ export const CartBuilder = ({
 
         <Card className="lg:hidden">
           <CardHeader className="pb-2">
-            <CardTitle>繧ｫ繝・ざ繝ｪ</CardTitle>
-            <CardDescription>繧ｿ繝・・縺励※蛻・ｊ譖ｿ縺・/CardDescription>
+            <CardTitle>カテゴリ</CardTitle>
+            <CardDescription>タップして切り替え</CardDescription>
           </CardHeader>
           <CardContent>
             <ScrollArea className="w-full">
@@ -195,7 +204,7 @@ export const CartBuilder = ({
                     value="all"
                     className="rounded-full px-5 py-3 text-base sm:px-4 sm:py-2 sm:text-sm data-[state=active]:bg-primary data-[state=active]:text-white"
                   >
-                    縺吶∋縺ｦ
+                    すべて
                   </TabsTrigger>
                   {categories?.map((category) => (
                     <TabsTrigger
@@ -221,7 +230,7 @@ export const CartBuilder = ({
               <Input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="繝｡繝九Η繝ｼ繧呈､懃ｴ｢..."
+                placeholder="メニューを検索..."
                 className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
               />
             </div>
@@ -233,7 +242,7 @@ export const CartBuilder = ({
             <Card className="sm:col-span-2 lg:col-span-3 xl:col-span-4">
               <CardContent className="py-12 text-center">
                 <UtensilsCrossed className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">繝｡繝九Η繝ｼ縺後≠繧翫∪縺帙ｓ</p>
+                <p className="text-muted-foreground">メニューがありません</p>
               </CardContent>
             </Card>
           ) : (
@@ -250,28 +259,38 @@ export const CartBuilder = ({
                   } ${inCart ? "ring-2 ring-primary ring-offset-2" : ""}`}
                 >
                   <CardContent className="p-4">
-                    <div className="flex flex-col gap-3"><div className="space-y-2">
+                    <div className="flex flex-col gap-3">
+                      <div className="h-32 w-full overflow-hidden rounded-lg bg-muted/40">
+                        <MenuImage
+                          imageUrl={item.imageUrl}
+                          name={item.name}
+                          className="h-full w-full"
+                          iconClassName="h-10 w-10"
+                          labelClassName="text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-bold text-base line-clamp-2">{item.name}</h3>
                           {inCart && (
                             <Badge className="bg-primary text-white">
-                              {cartItem?.quantity}轤ｹ
+                              {cartItem?.quantity}点
                             </Badge>
                           )}
                         </div>
                         <p className="text-xl font-bold text-primary">
-                          ﾂ･{Number(item.price).toLocaleString()}
+                          ¥{Number(item.price).toLocaleString()}
                         </p>
                         <div className="flex flex-wrap items-center gap-2">
-                          {isSoldOut && <Badge variant="secondary">螢ｲ蛻・ｌ</Badge>}
+                          {isSoldOut && <Badge variant="secondary">売切れ</Badge>}
                           {!isSoldOut && item.stockCount !== null && (
                             <Badge variant="outline" className="text-xs">
-                              谿九ｊ{item.stockCount}
+                              残り{item.stockCount}
                             </Badge>
                           )}
                           {!isSoldOut && item.stockCount === null && (
                             <Badge variant="outline" className="text-xs">
-                              蝨ｨ蠎ｫ縺ゅｊ
+                              在庫あり
                             </Badge>
                           )}
                         </div>
@@ -317,7 +336,7 @@ export const CartBuilder = ({
                             disabled={isSoldOut}
                           >
                             <Plus className="w-4 h-4 mr-2" />
-                            霑ｽ蜉
+                            追加
                           </Button>
                         )}
                       </div>
@@ -336,10 +355,10 @@ export const CartBuilder = ({
         <Card className="hidden lg:block">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              繧ｫ繝ｼ繝・
-              <Badge variant="outline">{totalItems}轤ｹ</Badge>
+              カート
+              <Badge variant="outline">{totalItems}点</Badge>
             </CardTitle>
-            <CardDescription>豕ｨ譁・・螳ｹ繧堤｢ｺ隱阪〒縺阪∪縺・/CardDescription>
+            <CardDescription>注文内容を確認できます</CardDescription>
           </CardHeader>
           <CardContent>
             <CartDetailContent
@@ -359,4 +378,3 @@ export const CartBuilder = ({
     </div>
   );
 };
-

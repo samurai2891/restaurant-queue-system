@@ -1,4 +1,4 @@
-﻿
+
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
-import { filterMenuItems } from "@/lib/menuFilter";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
@@ -137,7 +136,7 @@ export default function Register() {
 
   const createTicketMutation = trpc.ticket.create.useMutation({
     onSuccess: (created) => {
-      toast.success(`莨晉･ｨ #${created.ticketNumber} 繧剃ｽ懈・縺励∪縺励◆`);
+      toast.success(`伝票 #${created.ticketNumber} を作成しました`);
       setActiveTicketId(created.id);
       setLeftTab("tickets");
       setCreateOpen(false);
@@ -150,7 +149,7 @@ export default function Register() {
 
   const updateMetaMutation = trpc.ticket.updateMeta.useMutation({
     onSuccess: () => {
-      toast.success("莨晉･ｨ諠・ｱ繧呈峩譁ｰ縺励∪縺励◆");
+      toast.success("伝票情報を更新しました");
       refetchTicket();
       refetchTickets();
       setMetaOpen(false);
@@ -160,7 +159,7 @@ export default function Register() {
 
   const markItemizedMutation = trpc.ticket.markItemized.useMutation({
     onSuccess: () => {
-      toast.success("譏守ｴｰ蜈･蜉帙↓蛻・ｊ譖ｿ縺医∪縺励◆");
+      toast.success("明細入力に切り替えました");
       refetchTicket();
       refetchTickets();
     },
@@ -169,7 +168,7 @@ export default function Register() {
 
   const addItemsMutation = trpc.ticket.addItemsToTicket.useMutation({
     onSuccess: (res) => {
-      toast.success(`譏守ｴｰ繧定ｿｽ蜉縺励∪縺励◆・域ｳｨ譁・#${res.orderNumber}・荏);
+      toast.success(`明細を追加しました（注文 #${res.orderNumber}）`);
       setCart([]);
       refetchTicket();
       refetchTickets();
@@ -180,7 +179,7 @@ export default function Register() {
 
   const lockMutation = trpc.ticket.lockForPayment.useMutation({
     onSuccess: () => {
-      toast.success("莨夊ｨ医ｒ髢句ｧ九＠縺ｾ縺励◆・医Ο繝・け・・);
+      toast.success("会計を開始しました（ロック）");
       refetchTicket();
       refetchTickets();
     },
@@ -189,7 +188,7 @@ export default function Register() {
 
   const unlockMutation = trpc.ticket.unlock.useMutation({
     onSuccess: () => {
-      toast.success("繝ｭ繝・け繧定ｧ｣髯､縺励∪縺励◆");
+      toast.success("ロックを解除しました");
       refetchTicket();
       refetchTickets();
     },
@@ -198,7 +197,7 @@ export default function Register() {
 
   const confirmCashMutation = trpc.payment.confirmCash.useMutation({
     onSuccess: (res) => {
-      toast.success("莨夊ｨ医ｒ遒ｺ螳壹＠縺ｾ縺励◆");
+      toast.success("会計を確定しました");
       setCompleted({ totalAmount: res.totalAmount, changeAmount: res.changeAmount });
       refetchTicket();
       refetchTickets();
@@ -209,7 +208,7 @@ export default function Register() {
 
   const confirmManualMutation = trpc.payment.confirmManual.useMutation({
     onSuccess: (res) => {
-      toast.success("莨夊ｨ医ｒ遒ｺ螳壹＠縺ｾ縺励◆");
+      toast.success("会計を確定しました");
       setCompleted({ totalAmount: res.totalAmount });
       refetchTicket();
       refetchTickets();
@@ -237,10 +236,20 @@ export default function Register() {
     setCreateGuestName("");
     setCreateMemoText("");
   }, [createOpen]);
-  const filteredItems = useMemo(
-    () => filterMenuItems(menuItems, { categoryId: activeCategory, searchQuery: productSearch }),
-    [activeCategory, menuItems, productSearch]
-  );
+
+  const filteredItems = useMemo(() => {
+    const list = menuItems ?? [];
+    let results = list;
+    if (activeCategory !== "all") {
+      const catId = Number.parseInt(activeCategory, 10);
+      results = results.filter((i) => i.categoryId === catId);
+    }
+    if (productSearch.trim()) {
+      const q = productSearch.toLowerCase();
+      results = results.filter((i) => i.name.toLowerCase().includes(q));
+    }
+    return results;
+  }, [activeCategory, menuItems, productSearch]);
 
   const visibleQueueParties = useMemo(() => {
     const list = parties ?? [];
@@ -268,7 +277,7 @@ export default function Register() {
   const handleCreateSubmit = async () => {
     const partySizeNumber = Number.parseInt(createPartySize || "1", 10);
     if (createKind === "DINE_IN" && (!Number.isFinite(partySizeNumber) || partySizeNumber < 1)) {
-      toast.error("莠ｺ謨ｰ繧貞・蜉帙＠縺ｦ縺上□縺輔＞");
+      toast.error("人数を入力してください");
       return;
     }
 
@@ -282,17 +291,17 @@ export default function Register() {
         memoText: createKind === "MEMO_ONLY" && createMemoText.trim() ? createMemoText.trim() : undefined,
       });
     } catch {
-      // onError 縺ｧ toast 貂医∩
+      // onError で toast 済み
     }
   };
 
   const handleSaveDraft = async () => {
     if (!ticket) {
-      toast.error("莨晉･ｨ繧帝∈謚槭＠縺ｦ縺上□縺輔＞");
+      toast.error("伝票を選択してください");
       return false;
     }
     if (cart.length === 0) {
-      toast.error("霑ｽ蜉譏守ｴｰ縺後≠繧翫∪縺帙ｓ");
+      toast.error("追加明細がありません");
       return false;
     }
     try {
@@ -305,19 +314,19 @@ export default function Register() {
       });
       return true;
     } catch {
-      // onError 縺ｧ toast 貂医∩
+      // onError で toast 済み
       return false;
     }
   };
 
   const handleStartPayment = async () => {
     if (!ticket) {
-      toast.error("莨晉･ｨ繧帝∈謚槭＠縺ｦ縺上□縺輔＞");
+      toast.error("伝票を選択してください");
       return;
     }
 
     if (isMemoOnly) {
-      toast.error("繝｡繝｢莨晉･ｨ縺ｯ譏守ｴｰ蜈･蜉帛ｾ後↓莨夊ｨ医〒縺阪∪縺・);
+      toast.error("メモ伝票は明細入力後に会計できます");
       return;
     }
 
@@ -330,7 +339,7 @@ export default function Register() {
       try {
         await lockMutation.mutateAsync({ storeId: storeIdNum, ticketId: ticket.id });
       } catch {
-        // onError 縺ｧ toast 貂医∩
+        // onError で toast 済み
         return;
       }
     }
@@ -354,12 +363,12 @@ export default function Register() {
     if (!ticket) return;
     const partySizeRaw = metaPartySize.trim();
     if (!partySizeRaw) {
-      toast.error("莠ｺ謨ｰ繧貞・蜉帙＠縺ｦ縺上□縺輔＞");
+      toast.error("人数を入力してください");
       return;
     }
     const partySizeNumber = Number.parseInt(partySizeRaw, 10);
     if (!Number.isFinite(partySizeNumber) || partySizeNumber < 1) {
-      toast.error("莠ｺ謨ｰ繧貞・蜉帙＠縺ｦ縺上□縺輔＞");
+      toast.error("人数を入力してください");
       return;
     }
 
@@ -372,7 +381,7 @@ export default function Register() {
         guestName: metaGuestName.trim() ? metaGuestName.trim() : null,
       });
     } catch {
-      // onError 縺ｧ toast 貂医∩
+      // onError で toast 済み
     }
   };
 
@@ -395,11 +404,11 @@ export default function Register() {
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle>繝ｭ繧ｰ繧､繝ｳ縺悟ｿ・ｦ√〒縺・/CardTitle>
+            <CardTitle>ログインが必要です</CardTitle>
           </CardHeader>
           <CardContent>
             <Link href="/staff">
-              <Button className="w-full">繧ｹ繧ｿ繝・ヵ蜈･蜿｣縺ｸ</Button>
+              <Button className="w-full">スタッフ入口へ</Button>
             </Link>
           </CardContent>
         </Card>
@@ -412,7 +421,7 @@ export default function Register() {
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle>蠎苓・縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ</CardTitle>
+            <CardTitle>店舗が見つかりません</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -421,22 +430,22 @@ export default function Register() {
 
   return (
     <div className="flex -m-4 h-[calc(100svh-3.5rem)] min-h-0 flex-col bg-background overflow-hidden md:m-0 md:h-[100svh]">
-      {/* Top Bar (Air繝ｬ繧ｸ鬚ｨ) */}
+      {/* Top Bar (Airレジ風) */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-2">
         <Link href={`/queue/${storeIdNum}`}>
-              <Button variant="ghost" size="icon" aria-label="謌ｻ繧・>
+              <Button variant="ghost" size="icon" aria-label="戻る">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </Link>
             <div className="leading-tight">
-              <div className="font-semibold">繝ｬ繧ｸ</div>
+              <div className="font-semibold">レジ</div>
               <div className="text-xs text-muted-foreground">{store.name}</div>
         </div>
             {ticket && (
               <Badge variant="outline" className="ml-2">
-                莨晉･ｨ #{ticket.ticketNumber}
+                伝票 #{ticket.ticketNumber}
               </Badge>
             )}
       </div>
@@ -451,7 +460,7 @@ export default function Register() {
               }}
               disabled={ticketsLoading || partiesLoading || ticketLoading}
             >
-              蜀崎ｪｭ霎ｼ
+              再読込
             </Button>
                 </div>
           </div>
@@ -467,7 +476,7 @@ export default function Register() {
               className="flex-1"
               onClick={() => setMobileTab("left")}
             >
-              莨晉･ｨ/蜿嶺ｻ・
+              伝票/受付
             </Button>
             <Button
               variant={mobileTab === "menu" ? "default" : "outline"}
@@ -475,12 +484,12 @@ export default function Register() {
               className="flex-1"
               onClick={() => setMobileTab("menu")}
             >
-              繝｡繝九Η繝ｼ
+              メニュー
             </Button>
           </div>
         </div>
 
-        {/* Body: 2繧ｫ繝ｩ繝・亥ｷｦ:蟆守ｷ・荳ｭ螟ｮ:蝠・刀・・*/}
+        {/* Body: 2カラム（左:導線/中央:商品） */}
         <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[340px_1fr] overflow-hidden">
           {/* Left */}
           <div className={`border-r bg-muted/10 flex min-h-0 flex-col ${mobileTab !== "left" ? "hidden lg:flex" : ""}`}>
@@ -492,7 +501,7 @@ export default function Register() {
                   className="gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  蠎怜・莨晉･ｨ
+                  店内伝票
                 </Button>
                 <Button
                   variant="outline"
@@ -501,7 +510,7 @@ export default function Register() {
                   className="gap-2"
                 >
                   <Plus className="w-4 h-4" />
-                  蠎鈴ｭ・・uick・・
+                  店頭（Quick）
                 </Button>
                 <Button
                   variant="outline"
@@ -510,17 +519,17 @@ export default function Register() {
                   className="gap-2 col-span-2"
                 >
                   <Plus className="w-4 h-4" />
-                  繝｡繝｢莨晉･ｨ
+                  メモ伝票
                 </Button>
               </div>
 
               <Tabs value={leftTab} onValueChange={(v) => setLeftTab(v as LeftTab)}>
                 <TabsList className="w-full">
                   <TabsTrigger value="tickets" className="flex-1">
-                    莨晉･ｨ
+                    伝票
                   </TabsTrigger>
                   <TabsTrigger value="queue" className="flex-1">
-                    蜿嶺ｻ・
+                    受付
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -532,7 +541,7 @@ export default function Register() {
                     <Input
                       value={ticketSearch}
                       onChange={(e) => setTicketSearch(e.target.value)}
-                      placeholder="莨晉･ｨ逡ｪ蜿ｷ / 繝・・繝悶Ν / 鬘ｧ螳｢蜷阪〒讀懃ｴ｢"
+                      placeholder="伝票番号 / テーブル / 顧客名で検索"
                       className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                     />
                   </div>
@@ -545,7 +554,7 @@ export default function Register() {
                     ) : !tickets || tickets.length === 0 ? (
                       <Card>
                         <CardContent className="py-10 text-center text-muted-foreground">
-                          莨晉･ｨ縺後≠繧翫∪縺帙ｓ
+                          伝票がありません
                         </CardContent>
                       </Card>
                     ) : (
@@ -569,16 +578,16 @@ export default function Register() {
                                       {t.posStatus}
                                     </Badge>
                                     <div className="font-semibold">
-                                      莨晉･ｨ #{t.ticketNumber}
-                                      {t.tableLabel ? ` ﾂｷ ${t.tableLabel}` : ""}
+                                      伝票 #{t.ticketNumber}
+                                      {t.tableLabel ? ` · ${t.tableLabel}` : ""}
                                     </div>
                                   </div>
                                   <div className="flex items-center justify-between text-sm text-muted-foreground">
                                     <div className="line-clamp-1">
-                                      {t.guestName ?? "縺雁ｮ｢讒・}・・t.partySize}蜷搾ｼ・
+                                      {t.guestName ?? "お客様"}（{t.partySize}名）
                                     </div>
                                     <div className="font-semibold text-foreground">
-                                      ﾂ･{Number(t.unpaidTotalAmount ?? 0).toLocaleString()}
+                                      ¥{Number(t.unpaidTotalAmount ?? 0).toLocaleString()}
                                     </div>
                                   </div>
                                 </CardContent>
@@ -597,7 +606,7 @@ export default function Register() {
                     <Input
                       value={queueSearch}
                       onChange={(e) => setQueueSearch(e.target.value)}
-                      placeholder="蜿嶺ｻ倡分蜿ｷ / 繝・・繝悶Ν / 蜷榊燕縺ｧ讀懃ｴ｢"
+                      placeholder="受付番号 / テーブル / 名前で検索"
                       className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                     />
                   </div>
@@ -610,7 +619,7 @@ export default function Register() {
                     ) : visibleQueueParties.length === 0 ? (
                       <Card>
                         <CardContent className="py-10 text-center text-muted-foreground">
-                          蟇ｾ雎｡縺ｮ蜿嶺ｻ倥′縺ゅｊ縺ｾ縺帙ｓ
+                          対象の受付がありません
                         </CardContent>
                       </Card>
                     ) : (
@@ -631,12 +640,12 @@ export default function Register() {
                                 <CardContent className="p-4 flex flex-col gap-2">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="font-semibold">
-                                      蜿嶺ｻ・#{p.ticketNumber}
+                                      受付 #{p.ticketNumber}
                                     </div>
                                     <Badge variant="outline">{p.status}</Badge>
                                   </div>
                                   <div className="text-sm text-muted-foreground">
-                                    {p.guestName ?? "縺雁ｮ｢讒・}・・p.partySize}蜷搾ｼ・
+                                    {p.guestName ?? "お客様"}（{p.partySize}名）
                                   </div>
                                 </CardContent>
                               </Card>
@@ -657,7 +666,7 @@ export default function Register() {
               {!ticket ? (
                 <Card>
                   <CardContent className="py-12 text-center text-muted-foreground">
-                    蟾ｦ縺ｮ繝ｪ繧ｹ繝医°繧我ｼ晉･ｨ繧帝∈謚槭☆繧九°縲∵眠隕丈ｼ晉･ｨ繧剃ｽ懈・縺励※縺上□縺輔＞縲・
+                    左のリストから伝票を選択するか、新規伝票を作成してください。
                   </CardContent>
                 </Card>
               ) : (
@@ -665,16 +674,16 @@ export default function Register() {
                   {isLocked && (
                     <Card className="border-blue-200 bg-blue-50">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">莨夊ｨ井ｸｭ縺ｧ縺・/CardTitle>
-                        <CardDescription>莉也ｫｯ譛ｫ縺九ｉ縺ｮ邱ｨ髮・霑ｽ蜉繧貞宛髯舌＠縺ｦ縺・∪縺吶・/CardDescription>
+                        <CardTitle className="text-base">会計中です</CardTitle>
+                        <CardDescription>他端末からの編集/追加を制限しています。</CardDescription>
                       </CardHeader>
                     </Card>
                   )}
                   {isMemoOnly && (
                     <Card className="border-amber-200 bg-amber-50">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-base">繝｡繝｢莨晉･ｨ</CardTitle>
-                        <CardDescription>譏守ｴｰ蜈･蜉帙↓蛻・ｊ譖ｿ縺医ｋ縺ｾ縺ｧ蝠・刀霑ｽ蜉/莨夊ｨ医・縺ｧ縺阪∪縺帙ｓ縲・/CardDescription>
+                        <CardTitle className="text-base">メモ伝票</CardTitle>
+                        <CardDescription>明細入力に切り替えるまで商品追加/会計はできません。</CardDescription>
                       </CardHeader>
                     </Card>
                   )}
@@ -684,7 +693,7 @@ export default function Register() {
                     <Input
                       value={productSearch}
                       onChange={(event) => setProductSearch(event.target.value)}
-                      placeholder="蝠・刀蜷阪〒讀懃ｴ｢..."
+                      placeholder="商品名で検索..."
                       className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                       disabled={!canAddLineItems || isSubmittingPayment}
                     />
@@ -697,7 +706,7 @@ export default function Register() {
                           value="all"
                           className="rounded-full px-5 py-3 whitespace-nowrap data-[state=active]:bg-primary data-[state=active]:text-white"
                         >
-                          縺吶∋縺ｦ
+                          すべて
                         </TabsTrigger>
                         {categories?.map((c) => (
                           <TabsTrigger
@@ -728,13 +737,13 @@ export default function Register() {
                           >
                             <div className="font-semibold line-clamp-2">{item.name}</div>
                             <div className="mt-2 text-lg font-bold text-primary">
-                              ﾂ･{Number(item.price).toLocaleString()}
+                              ¥{Number(item.price).toLocaleString()}
                             </div>
                             <div className="mt-2">
                               {isSoldOut ? (
-                                <Badge variant="secondary">螢ｲ蛻・ｌ</Badge>
+                                <Badge variant="secondary">売切れ</Badge>
                               ) : (
-                                <Badge variant="outline" className="text-xs">蝨ｨ蠎ｫ縺ゅｊ</Badge>
+                                <Badge variant="outline" className="text-xs">在庫あり</Badge>
                               )}
                             </div>
                           </button>
@@ -760,10 +769,10 @@ export default function Register() {
                 }`}
               >
                 <span className="text-xs text-muted-foreground">
-                  {ticket ? `莨晉･ｨ #${ticket.ticketNumber} ﾂｷ ${posStatus}` : "莨晉･ｨ繧帝∈謚槭＠縺ｦ縺上□縺輔＞"}
+                  {ticket ? `伝票 #${ticket.ticketNumber} · ${posStatus}` : "伝票を選択してください"}
                 </span>
                 <span className="text-base font-bold">
-                  {ticket ? `${combinedItems}轤ｹ ﾂｷ ﾂ･${combinedTotal.toLocaleString()}` : "-"}
+                  {ticket ? `${combinedItems}点 · ¥${combinedTotal.toLocaleString()}` : "-"}
                 </span>
               </button>
             </SheetTrigger>
@@ -774,7 +783,7 @@ export default function Register() {
               onClick={handleSaveDraft}
               disabled={!canAddLineItems || cart.length === 0 || addItemsMutation.isPending}
             >
-              荳譎ゆｿ晏ｭ・
+              一時保存
             </Button>
             <Button
               className="h-12"
@@ -782,7 +791,7 @@ export default function Register() {
               disabled={!ticket || isMemoOnly || lockMutation.isPending || isSubmittingPayment}
             >
               <Wallet className="w-4 h-4 mr-2" />
-              謾ｯ謇輔＞
+              支払い
             </Button>
           </div>
         </div>
@@ -790,17 +799,17 @@ export default function Register() {
         {/* Details Sheet */}
         <SheetContent side="bottom" className="h-[80vh] rounded-t-2xl px-0 pb-6">
           <SheetHeader className="border-b">
-            <SheetTitle>譏守ｴｰ</SheetTitle>
+            <SheetTitle>明細</SheetTitle>
             <SheetDescription>
               {ticket
-                ? `莨晉･ｨ #${ticket.ticketNumber}${ticket.tableLabel ? ` ﾂｷ ${ticket.tableLabel}` : ""} ﾂｷ ${ticket.partySize}蜷港
-                : "莨晉･ｨ繧帝∈謚槭☆繧九→縲∵・邏ｰ縺ｨ莨夊ｨ医′陦ｨ遉ｺ縺輔ｌ縺ｾ縺吶・}
+                ? `伝票 #${ticket.ticketNumber}${ticket.tableLabel ? ` · ${ticket.tableLabel}` : ""} · ${ticket.partySize}名`
+                : "伝票を選択すると、明細と会計が表示されます。"}
             </SheetDescription>
           </SheetHeader>
 
           {!ticket ? (
             <div className="p-4 text-center text-muted-foreground">
-              莨晉･ｨ繧帝∈謚槭＠縺ｦ縺上□縺輔＞縲・
+              伝票を選択してください。
             </div>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pt-4">
@@ -808,7 +817,7 @@ export default function Register() {
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2">
-                      譏守ｴｰ <Badge variant="outline">{combinedItems}轤ｹ</Badge>
+                      明細 <Badge variant="outline">{combinedItems}点</Badge>
                     </span>
                     <div className="flex items-center gap-2">
                       <Badge variant={statusBadgeVariant[posStatus] ?? "secondary"}>{posStatus}</Badge>
@@ -819,7 +828,7 @@ export default function Register() {
                         disabled={!canEditTicket || updateMetaMutation.isPending}
                       >
                         <Pencil className="w-4 h-4 mr-2" />
-                        莨晉･ｨ邱ｨ髮・
+                        伝票編集
                       </Button>
                       {posStatus === "PAYMENT_LOCKED" && (
                         <Button
@@ -828,26 +837,26 @@ export default function Register() {
                           onClick={() => unlockMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
                           disabled={unlockMutation.isPending}
                         >
-                          繝ｭ繝・け隗｣髯､
+                          ロック解除
                         </Button>
                       )}
                     </div>
                   </CardTitle>
                   <CardDescription>
-                    莨晉･ｨ #{ticket.ticketNumber}
-                    {ticket.tableLabel ? ` ﾂｷ ${ticket.tableLabel}` : ""}
-                    {` ﾂｷ ${ticket.partySize}蜷港}
+                    伝票 #{ticket.ticketNumber}
+                    {ticket.tableLabel ? ` · ${ticket.tableLabel}` : ""}
+                    {` · ${ticket.partySize}名`}
                   </CardDescription>
                 </CardHeader>
 
                 <CardContent className="flex min-h-0 flex-1 flex-col gap-4">
                   {isMemoOnly && (
                     <div className="space-y-3 rounded-lg border bg-amber-50 p-3">
-                      <div className="text-sm font-medium">繝｡繝｢</div>
+                      <div className="text-sm font-medium">メモ</div>
                       <Textarea
                         value={memoDraft}
                         onChange={(e) => setMemoDraft(e.target.value)}
-                        placeholder="蜿｣鬆ｭ繝｡繝｢繧貞・蜉幢ｼ井ｾ・ 辟ｼ縺榊刈貂帙√い繝ｬ繝ｫ繧ｮ繝ｼ縺ｪ縺ｩ・・
+                        placeholder="口頭メモを入力（例: 焼き加減、アレルギーなど）"
                         rows={4}
                       />
                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -862,13 +871,13 @@ export default function Register() {
                           }
                           disabled={updateMetaMutation.isPending || isLocked}
                         >
-                          繝｡繝｢繧剃ｿ晏ｭ・
+                          メモを保存
                         </Button>
                         <Button
                           onClick={() => markItemizedMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
                           disabled={markItemizedMutation.isPending || isLocked}
                         >
-                          譏守ｴｰ蜈･蜉帙↓蛻・ｊ譖ｿ縺医ｋ
+                          明細入力に切り替える
                         </Button>
                       </div>
                     </div>
@@ -877,22 +886,22 @@ export default function Register() {
                   <ScrollArea className="flex-1 min-h-0 pr-3">
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">譛ｪ邊ｾ邂暦ｼ域里蟄假ｼ・/div>
+                        <div className="text-xs text-muted-foreground">未精算（既存）</div>
                         {unpaidOrders.length === 0 ? (
-                          <div className="text-sm text-muted-foreground py-2">譛ｪ邊ｾ邂玲・邏ｰ縺ｯ縺ゅｊ縺ｾ縺帙ｓ</div>
+                          <div className="text-sm text-muted-foreground py-2">未精算明細はありません</div>
                         ) : (
                           unpaidOrders.flatMap((order) =>
                             (order.items ?? []).map((it) => (
                               <div key={`p-${order.id}-${it.id}`} className="flex items-center justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="font-medium line-clamp-1">
-                                    {it.menuItem?.name ?? `蝠・刀#${it.menuItemId}`}
+                                    {it.menuItem?.name ?? `商品#${it.menuItemId}`}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
-                                    x{it.quantity} ﾂｷ ﾂ･{Number(it.subtotal ?? 0).toLocaleString()}
+                                    x{it.quantity} · ¥{Number(it.subtotal ?? 0).toLocaleString()}
                                   </div>
                                 </div>
-                                <Badge variant="secondary">遒ｺ螳壽ｸ・/Badge>
+                                <Badge variant="secondary">確定済</Badge>
                               </div>
                             ))
                           )
@@ -902,9 +911,9 @@ export default function Register() {
                       <Separator />
 
                       <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">霑ｽ蜉・域悴菫晏ｭ假ｼ・/div>
+                        <div className="text-xs text-muted-foreground">追加（未保存）</div>
                         {cart.length === 0 ? (
-                          <div className="text-sm text-muted-foreground py-2">霑ｽ蜉縺ｯ縺ゅｊ縺ｾ縺帙ｓ</div>
+                          <div className="text-sm text-muted-foreground py-2">追加はありません</div>
                         ) : (
                           cart.map((c) => (
                             <div
@@ -914,7 +923,7 @@ export default function Register() {
                               <div className="min-w-0">
                                 <div className="font-medium line-clamp-1">{c.name}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  ﾂ･{(c.price * c.quantity).toLocaleString()}
+                                  ¥{(c.price * c.quantity).toLocaleString()}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
@@ -955,16 +964,16 @@ export default function Register() {
                   <Separator />
 
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">譌｢蟄伜粋險・/span>
-                    <span className="font-semibold">ﾂ･{persistedTotalAmount.toLocaleString()}</span>
+                    <span className="text-muted-foreground">既存合計</span>
+                    <span className="font-semibold">¥{persistedTotalAmount.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">霑ｽ蜉蜷郁ｨ・/span>
-                    <span className="font-semibold">ﾂ･{draftTotalAmount.toLocaleString()}</span>
+                    <span className="text-muted-foreground">追加合計</span>
+                    <span className="font-semibold">¥{draftTotalAmount.toLocaleString()}</span>
                   </div>
                   <div className="flex items-center justify-between text-base">
-                    <span className="font-semibold">蜷郁ｨ茨ｼ育ｨ手ｾｼ・・/span>
-                    <span className="text-xl font-bold text-primary">ﾂ･{combinedTotal.toLocaleString()}</span>
+                    <span className="font-semibold">合計（税込）</span>
+                    <span className="text-xl font-bold text-primary">¥{combinedTotal.toLocaleString()}</span>
                   </div>
 
                   <div className="flex items-center gap-2 pt-2">
@@ -974,7 +983,7 @@ export default function Register() {
                       onClick={handleSaveDraft}
                       disabled={!canAddLineItems || cart.length === 0 || addItemsMutation.isPending}
                     >
-                      荳譎ゆｿ晏ｭ・
+                      一時保存
                     </Button>
                     <Button
                       className="h-12 flex-1"
@@ -982,7 +991,7 @@ export default function Register() {
                       disabled={!ticket || isMemoOnly || lockMutation.isPending || isSubmittingPayment}
                     >
                       <Wallet className="w-4 h-4 mr-2" />
-                      謾ｯ謇輔＞
+                      支払い
                     </Button>
                   </div>
                 </CardContent>
@@ -997,14 +1006,14 @@ export default function Register() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {createKind === "DINE_IN" ? "蠎怜・莨晉･ｨ繧剃ｽ懈・" : "繝｡繝｢莨晉･ｨ繧剃ｽ懈・"}
+              {createKind === "DINE_IN" ? "店内伝票を作成" : "メモ伝票を作成"}
             </DialogTitle>
-            <DialogDescription>蠢・ｦ・・岼繧貞・蜉帙＠縺ｦ菴懈・縺励∪縺吶・/DialogDescription>
+            <DialogDescription>必要項目を入力して作成します。</DialogDescription>
           </DialogHeader>
                 <div className="space-y-4">
             {createKind === "DINE_IN" && (
               <div className="space-y-2">
-                <Label htmlFor="create-party-size">莠ｺ謨ｰ</Label>
+                <Label htmlFor="create-party-size">人数</Label>
                 <Input
                   id="create-party-size"
                   type="number"
@@ -1015,31 +1024,31 @@ export default function Register() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="create-table-label">繝・・繝悶Ν蜷搾ｼ井ｻｻ諢擾ｼ・/Label>
+              <Label htmlFor="create-table-label">テーブル名（任意）</Label>
               <Input
                 id="create-table-label"
                 value={createTableLabel}
                 onChange={(e) => setCreateTableLabel(e.target.value)}
-                placeholder="萓・ T-12"
+                placeholder="例: T-12"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-guest-name">鬘ｧ螳｢蜷搾ｼ井ｻｻ諢擾ｼ・/Label>
+              <Label htmlFor="create-guest-name">顧客名（任意）</Label>
               <Input
                 id="create-guest-name"
                 value={createGuestName}
                 onChange={(e) => setCreateGuestName(e.target.value)}
-                placeholder="萓・ 螻ｱ逕ｰ讒・
+                placeholder="例: 山田様"
               />
             </div>
             {createKind === "MEMO_ONLY" && (
               <div className="space-y-2">
-                <Label htmlFor="create-memo-text">繝｡繝｢・井ｻｻ諢擾ｼ・/Label>
+                <Label htmlFor="create-memo-text">メモ（任意）</Label>
                 <Textarea
                   id="create-memo-text"
                   value={createMemoText}
                   onChange={(e) => setCreateMemoText(e.target.value)}
-                  placeholder="蜿｣鬆ｭ繝｡繝｢縺ｪ縺ｩ"
+                  placeholder="口頭メモなど"
                   rows={4}
                 />
               </div>
@@ -1047,10 +1056,10 @@ export default function Register() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              繧ｭ繝｣繝ｳ繧ｻ繝ｫ
+              キャンセル
             </Button>
             <Button onClick={handleCreateSubmit} disabled={createTicketMutation.isPending}>
-              菴懈・
+              作成
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1060,21 +1069,21 @@ export default function Register() {
       <Dialog open={metaOpen} onOpenChange={setMetaOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>莨晉･ｨ邱ｨ髮・/DialogTitle>
-            <DialogDescription>繝・・繝悶Ν蜷阪・莠ｺ謨ｰ縺ｪ縺ｩ繧呈峩譁ｰ縺励∪縺吶・/DialogDescription>
+            <DialogTitle>伝票編集</DialogTitle>
+            <DialogDescription>テーブル名・人数などを更新します。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="meta-table-label">繝・・繝悶Ν蜷・/Label>
+              <Label htmlFor="meta-table-label">テーブル名</Label>
               <Input
                 id="meta-table-label"
                 value={metaTableLabel}
                 onChange={(e) => setMetaTableLabel(e.target.value)}
-                placeholder="萓・ T-12"
+                placeholder="例: T-12"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="meta-party-size">莠ｺ謨ｰ</Label>
+              <Label htmlFor="meta-party-size">人数</Label>
               <Input
                 id="meta-party-size"
                 type="number"
@@ -1084,21 +1093,21 @@ export default function Register() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="meta-guest-name">鬘ｧ螳｢蜷・/Label>
+              <Label htmlFor="meta-guest-name">顧客名</Label>
               <Input
                 id="meta-guest-name"
                 value={metaGuestName}
                 onChange={(e) => setMetaGuestName(e.target.value)}
-                placeholder="萓・ 螻ｱ逕ｰ讒・
+                placeholder="例: 山田様"
               />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setMetaOpen(false)}>
-              繧ｭ繝｣繝ｳ繧ｻ繝ｫ
+              キャンセル
             </Button>
             <Button onClick={handleSubmitMeta} disabled={updateMetaMutation.isPending || !canEditTicket}>
-              菫晏ｭ・
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1118,9 +1127,9 @@ export default function Register() {
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>謾ｯ謇輔＞</DialogTitle>
+            <DialogTitle>支払い</DialogTitle>
             <DialogDescription>
-              莨晉･ｨ #{ticket?.ticketNumber ?? "-"} 縺ｮ莨夊ｨ医ｒ遒ｺ螳壹＠縺ｾ縺吶・
+              伝票 #{ticket?.ticketNumber ?? "-"} の会計を確定します。
             </DialogDescription>
           </DialogHeader>
 
@@ -1130,19 +1139,19 @@ export default function Register() {
                 <CardHeader className="text-center">
                   <CardTitle className="flex items-center justify-center gap-2 text-green-700">
                     <CheckCircle2 className="w-6 h-6" />
-                    縺贋ｼ夊ｨ医ｒ螳御ｺ・＠縺ｾ縺励◆
+                    お会計を完了しました
                       </CardTitle>
-                  <CardDescription>莨夊ｨ育ｵ先棡</CardDescription>
+                  <CardDescription>会計結果</CardDescription>
                     </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="text-center space-y-2">
-                    <div className="text-sm text-muted-foreground">蜷郁ｨ・/div>
-                    <div className="text-4xl font-bold">ﾂ･{completed.totalAmount.toLocaleString()}</div>
+                    <div className="text-sm text-muted-foreground">合計</div>
+                    <div className="text-4xl font-bold">¥{completed.totalAmount.toLocaleString()}</div>
                         </div>
                   {completed.changeAmount !== undefined && (
                     <div className="text-center space-y-2">
-                      <div className="text-sm text-muted-foreground">縺翫▽繧・/div>
-                      <div className="text-5xl font-bold text-primary">ﾂ･{completed.changeAmount.toLocaleString()}</div>
+                      <div className="text-sm text-muted-foreground">おつり</div>
+                      <div className="text-5xl font-bold text-primary">¥{completed.changeAmount.toLocaleString()}</div>
                         </div>
                       )}
                 </CardContent>
@@ -1152,7 +1161,7 @@ export default function Register() {
                   onClick={() => setPaymentOpen(false)}
                   className="w-full sm:w-auto"
                 >
-                  髢峨§繧・
+                  閉じる
                 </Button>
               </DialogFooter>
             </div>
@@ -1161,8 +1170,8 @@ export default function Register() {
               {needsLock && (
                 <Card className="border-blue-200 bg-blue-50">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base">莨夊ｨ磯幕蟋具ｼ医Ο繝・け・・/CardTitle>
-                    <CardDescription>莨夊ｨ井ｸｭ縺ｯ莉也ｫｯ譛ｫ縺九ｉ縺ｮ邱ｨ髮・霑ｽ蜉繧貞宛髯舌＠縺ｾ縺吶・/CardDescription>
+                    <CardTitle className="text-base">会計開始（ロック）</CardTitle>
+                    <CardDescription>会計中は他端末からの編集/追加を制限します。</CardDescription>
                   </CardHeader>
                   <CardContent className="flex gap-2">
                     <Button
@@ -1170,14 +1179,14 @@ export default function Register() {
                       onClick={() => ticket && lockMutation.mutate({ storeId: storeIdNum, ticketId: ticket.id })}
                       disabled={isSubmittingPayment}
                     >
-                      莨夊ｨ医ｒ髢句ｧ九☆繧・
+                      会計を開始する
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => setPaymentOpen(false)}
                       disabled={isSubmittingPayment}
                     >
-                      髢峨§繧・
+                      閉じる
                       </Button>
                     </CardContent>
                   </Card>
@@ -1188,46 +1197,46 @@ export default function Register() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                       <Wallet className="w-5 h-5" />
-                      莨夊ｨ亥ｯｾ雎｡
+                      会計対象
                       </CardTitle>
-                    <CardDescription>譛ｪ邊ｾ邂励・譏守ｴｰ蜷郁ｨ医〒縺・/CardDescription>
+                    <CardDescription>未精算の明細合計です</CardDescription>
                     </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">蜷郁ｨ茨ｼ育ｨ手ｾｼ・・/span>
-                      <span className="text-xl font-bold text-primary">ﾂ･{persistedTotalAmount.toLocaleString()}</span>
+                      <span className="text-muted-foreground">合計（税込）</span>
+                      <span className="text-xl font-bold text-primary">¥{persistedTotalAmount.toLocaleString()}</span>
                     </div>
                     <Separator />
                     <div className="text-xs text-muted-foreground">
-                      繝ｭ繝・け荳ｭ縺ｮ縺ｿ遒ｺ螳壹〒縺阪∪縺吶・
+                      ロック中のみ確定できます。
                       </div>
                     </CardContent>
                   </Card>
 
               <Card>
                 <CardHeader>
-                    <CardTitle>迴ｾ驥・/CardTitle>
-                    <CardDescription>蜿怜叙驥鷹｡阪ｒ蜈･蜉帙＠縺ｦ遒ｺ螳壹＠縺ｾ縺・/CardDescription>
+                    <CardTitle>現金</CardTitle>
+                    <CardDescription>受取金額を入力して確定します</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                      <div className="text-sm text-muted-foreground">蜿怜叙驥鷹｡・/div>
+                      <div className="text-sm text-muted-foreground">受取金額</div>
                         <Input
                           type="number"
                           min={0}
                           value={cashReceived}
                         onChange={(e) => setCashReceived(e.target.value)}
-                        placeholder="萓・ 10000"
+                        placeholder="例: 10000"
                         disabled={isSubmittingPayment || needsLock}
                         />
                       </div>
                       <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">縺翫▽繧・/span>
+                      <span className="text-muted-foreground">おつり</span>
                         <span className={`font-semibold ${changeAmount < 0 ? "text-destructive" : "text-foreground"}`}>
                         {cashReceived ? (
                           changeAmount >= 0
-                            ? `ﾂ･${changeAmount.toLocaleString()}`
-                            : `荳崎ｶｳ ﾂ･${Math.abs(changeAmount).toLocaleString()}`
+                            ? `¥${changeAmount.toLocaleString()}`
+                            : `不足 ¥${Math.abs(changeAmount).toLocaleString()}`
                         ) : "-"}
                         </span>
                       </div>
@@ -1243,7 +1252,7 @@ export default function Register() {
                       }
                       disabled={!canConfirmCash || isSubmittingPayment}
                     >
-                      迴ｾ驥代〒遒ｺ螳・
+                      現金で確定
                   </Button>
                 </CardContent>
               </Card>
@@ -1251,22 +1260,22 @@ export default function Register() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>謇句虚遒ｺ螳・/CardTitle>
-                  <CardDescription>螟夜ΚPOS/繧ｫ繝ｼ繝臥ｭ峨〒謾ｯ謇輔＞貂医∩縺ｮ蝣ｴ蜷・/CardDescription>
+                  <CardTitle>手動確定</CardTitle>
+                  <CardDescription>外部POS/カード等で支払い済みの場合</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <RadioGroup value={manualMethod} onValueChange={setManualMethod} className="space-y-2">
                     <label className="flex items-center gap-2 rounded-md border p-3">
                       <RadioGroupItem value="card" id="register-manual-card" />
-                      <span className="text-sm font-medium">繧ｫ繝ｼ繝・/span>
+                      <span className="text-sm font-medium">カード</span>
                     </label>
                     <label className="flex items-center gap-2 rounded-md border p-3">
                       <RadioGroupItem value="qr" id="register-manual-qr" />
-                      <span className="text-sm font-medium">QR豎ｺ貂・/span>
+                      <span className="text-sm font-medium">QR決済</span>
                     </label>
                     <label className="flex items-center gap-2 rounded-md border p-3">
                       <RadioGroupItem value="external" id="register-manual-external" />
-                      <span className="text-sm font-medium">螟夜ΚPOS・域焔蜍慕｢ｺ螳夲ｼ・/span>
+                      <span className="text-sm font-medium">外部POS（手動確定）</span>
                     </label>
                   </RadioGroup>
                   <Button
@@ -1282,7 +1291,7 @@ export default function Register() {
                     }
                     disabled={isSubmittingPayment || needsLock || persistedTotalAmount <= 0}
                   >
-                    謇句虚縺ｧ遒ｺ螳・
+                    手動で確定
                 </Button>
         </CardContent>
       </Card>
@@ -1293,4 +1302,3 @@ export default function Register() {
     </div>
   );
 }
-
