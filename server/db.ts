@@ -1123,13 +1123,13 @@ export async function getSalesDailySummary(
     ORDER BY date ASC
   `);
 
-  const rows: Array<{
+  const rows = (Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || []) as Array<{
     date: string;
     totalSales: string | number;
     orderCount: string | number;
     cashSales: string | number;
     otherSales: string | number;
-  }> = Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || [];
+  }>;
 
   // 商品数を取得
   const itemCountRows = await db.execute<{
@@ -1148,8 +1148,7 @@ export async function getSalesDailySummary(
     GROUP BY DATE(${orders.paidAt})
   `);
 
-  const itemRows: Array<{ date: string; itemCount: string | number }> = 
-    Array.isArray(itemCountRows) ? itemCountRows : (itemCountRows as { rows?: unknown[] }).rows || [];
+  const itemRows = (Array.isArray(itemCountRows) ? itemCountRows : (itemCountRows as { rows?: unknown[] }).rows || []) as Array<{ date: string; itemCount: string | number }>;
   const itemCountMap = new Map(itemRows.map(r => [r.date, Number(r.itemCount)]));
 
   // 客数を取得（partySize合計）
@@ -1169,8 +1168,7 @@ export async function getSalesDailySummary(
     GROUP BY DATE(${orders.paidAt})
   `);
 
-  const guestRows: Array<{ date: string; guestCount: string | number }> = 
-    Array.isArray(guestCountRows) ? guestCountRows : (guestCountRows as { rows?: unknown[] }).rows || [];
+  const guestRows = (Array.isArray(guestCountRows) ? guestCountRows : (guestCountRows as { rows?: unknown[] }).rows || []) as Array<{ date: string; guestCount: string | number }>;
   const guestCountMap = new Map(guestRows.map(r => [r.date, Number(r.guestCount)]));
 
   const dayOfWeekNames = ['日', '月', '火', '水', '木', '金', '土'];
@@ -1252,7 +1250,7 @@ export async function getSalesDailyDetail(
       AND DATE(${orders.paidAt}) = ${date}
   `);
 
-  const salesData = Array.isArray(salesRows) ? salesRows[0] : ((salesRows as { rows?: unknown[] }).rows || [])[0];
+  const salesData: { totalSales?: number; orderCount?: number; cashSales?: number; otherSales?: number } = Array.isArray(salesRows) ? salesRows[0] : ((salesRows as { rows?: unknown[] }).rows || [])[0] || {};
   const totalSales = Number(salesData?.totalSales ?? 0);
   const orderCount = Number(salesData?.orderCount ?? 0);
   const cashSales = Number(salesData?.cashSales ?? 0);
@@ -1267,7 +1265,7 @@ export async function getSalesDailyDetail(
       AND ${orders.paymentStatus} = 'paid'
       AND DATE(${orders.paidAt}) = ${date}
   `);
-  const guestData = Array.isArray(guestRows) ? guestRows[0] : ((guestRows as { rows?: unknown[] }).rows || [])[0];
+  const guestData: { guestCount?: number } = Array.isArray(guestRows) ? guestRows[0] : ((guestRows as { rows?: unknown[] }).rows || [])[0] || {};
   const guestCount = Number(guestData?.guestCount ?? 0);
 
   // 商品数と原価
@@ -1285,7 +1283,7 @@ export async function getSalesDailyDetail(
       AND ${orders.paymentStatus} = 'paid'
       AND DATE(${orders.paidAt}) = ${date}
   `);
-  const itemData = Array.isArray(itemRows) ? itemRows[0] : ((itemRows as { rows?: unknown[] }).rows || [])[0];
+  const itemData: { itemCount?: number; costTotal?: number } = Array.isArray(itemRows) ? itemRows[0] : ((itemRows as { rows?: unknown[] }).rows || [])[0] || {};
   const itemCount = Number(itemData?.itemCount ?? 0);
   const costTotal = Number(itemData?.costTotal ?? 0);
 
@@ -1368,14 +1366,14 @@ export async function getSalesByCategory(
     ORDER BY ${menuCategories.sortOrder}, ${menuCategories.name}, ${menuItems.sortOrder}, ${menuItems.name}
   `);
 
-  const rows: Array<{
+  const rows = (Array.isArray(rawRows) ? rawRows : ((rawRows as { rows?: unknown[] }).rows || [])) as Array<{
     categoryId: number;
     categoryName: string;
     menuItemId: number;
     menuItemName: string;
     quantity: string | number;
     totalAmount: string | number;
-  }> = Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || [];
+  }>;
 
   // カテゴリーごとにグループ化
   const categoryMap = new Map<number, SalesByCategoryRow>();
