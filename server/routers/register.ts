@@ -64,10 +64,8 @@ export const registerRouter = router({
     .query(async ({ ctx, input }) => {
       await checkStoreAccess(ctx.user.id, input.storeId);
       
-      const today = new Date();
-      const sessionDate = today.toISOString().split("T")[0];
-      
-      const session = await db.getRegisterSessionByStoreAndDate(input.storeId, sessionDate);
+      // Get the most recent open session for this store
+      const session = await db.getCurrentRegisterSession(input.storeId);
       return session ?? null;
     }),
 

@@ -163,3 +163,9 @@
 - [x] 「本日のレジセッションは既に締め済みです」エラーを修正（複数シフト対応：締め済みセッションがあっても新規セッションを作成可能に）
 - [x] 「<button> cannot contain a nested <button>」HTML構造エラーを修正（Link内のButtonをasChild属性で修正）
 - [x] 「伝票が見つかりません」エラーを修正（ticket.getクエリのenabled条件を強化し、activeTicketIdがnullまたは0の場合はクエリを実行しないように修正）
+
+
+## バグ修正（2026-01-08 - レジセッションエラー再発）
+- [x] /register/1ページで再発していた「本日のレジセッションは既に締め済みです」エラーを修正
+- [x] getCurrentSessionクエリをgetCurrentRegisterSession関数を使用するように修正（最新の開いているセッションを返す）
+- [x] 複数シフト対応を完全に実装（同じ日に複数のセッションを作成・管理可能）
