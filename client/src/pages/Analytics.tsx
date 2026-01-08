@@ -59,7 +59,10 @@ const getRangeFromToday = (daysAgo: number) => {
   };
 };
 
-const formatYen = (value: number) => {
+const formatYen = (value: number | null | undefined) => {
+  if (value == null || isNaN(value)) {
+    return '¥0';
+  }
   return `¥${value.toLocaleString()}`;
 };
 
@@ -147,22 +150,22 @@ export default function Analytics() {
   };
 
   const waitTimeByHour = useMemo(() => {
-    if (!waitTimeStats) {
+    if (!waitTimeStats || waitTimeStats.length === 0) {
       return { data: [], seatTypeNames: [] as string[] };
     }
     const seatTypeNames = new Set<string>();
     const grouped = new Map<number, Record<string, number | string>>();
     waitTimeStats.forEach((stat) => {
-      const seatTypeName = stat.seatTypeName ?? "未指定";
+      const seatTypeName = stat.seatTypeName && stat.seatTypeName.trim() ? stat.seatTypeName : "未指定";
       seatTypeNames.add(seatTypeName);
       const entry = grouped.get(stat.hour) ?? { hour: stat.hour, hourLabel: `${stat.hour}:00` };
-      entry[seatTypeName] = stat[waitTimeMetric];
+      entry[seatTypeName] = stat[waitTimeMetric] ?? 0;
       grouped.set(stat.hour, entry);
     });
     const data = Array.from(grouped.values()).sort((a, b) => Number(a.hour) - Number(b.hour));
     return {
       data,
-      seatTypeNames: Array.from(seatTypeNames).sort((a, b) => a.localeCompare(b, "ja")),
+      seatTypeNames: Array.from(seatTypeNames).filter(name => name).sort((a, b) => a.localeCompare(b, "ja")),
     };
   }, [waitTimeStats, waitTimeMetric]);
 
@@ -181,30 +184,32 @@ export default function Analytics() {
   ], []);
 
   const stats = useMemo(() => analytics ? {
-    totalParties: analytics.totalParties,
-    seatedRate: analytics.totalParties > 0 ? (analytics.seatedCount / analytics.totalParties * 100).toFixed(1) : 0,
-    avgWaitTime: analytics.avgWaitTime,
-    noshowRate: analytics.totalParties > 0 ? (analytics.noshowCount / analytics.totalParties * 100).toFixed(1) : 0,
-    notificationResponseRate: 87.2,
+    totalParties: analytics.totalParties ?? 0,
+    seatedRate: analytics.totalParties > 0 ? (analytics.seatedCount / analytics.totalParties * 100).toFixed(1) : '0',
+    avgWaitTime: analytics.avgWaitTime ?? 0,
+    noshowRate: analytics.totalParties > 0 ? (analytics.noshowCount / analytics.totalParties * 100).toFixed(1) : '0',
+    notificationResponseRate: '87.2',
     avgTurnoverTime: 45,
   } : {
-    totalParties: 341,
-    seatedRate: 92.4,
-    avgWaitTime: 23,
-    noshowRate: 5.3,
-    notificationResponseRate: 87.2,
-    avgTurnoverTime: 45,
+    totalParties: 0,
+    seatedRate: '0',
+    avgWaitTime: 0,
+    noshowRate: '0',
+    notificationResponseRate: '0',
+    avgTurnoverTime: 0,
   }, [analytics]);
 
   // 売上グラフ用データ
   const salesChartData = useMemo(() => {
-    if (!salesSummary) return [];
-    return salesSummary.map(item => ({
-      date: `${item.date.slice(5)}(${item.dayOfWeek})`,
-      fullDate: item.date,
-      sales: item.totalSales,
-      guestCount: item.guestCount,
-    }));
+    if (!salesSummary || salesSummary.length === 0) return [];
+    return salesSummary
+      .filter(item => item.date && item.date !== 'undefined')
+      .map(item => ({
+        date: `${item.date.slice(5)}(${item.dayOfWeek || ''})`,
+        fullDate: item.date,
+        sales: item.totalSales ?? 0,
+        guestCount: item.guestCount ?? 0,
+      }));
   }, [salesSummary]);
 
   // 売上サマリー統計
@@ -217,13 +222,13 @@ export default function Analytics() {
         avgOrderAmount: 0,
       };
     }
-    const totalSales = salesSummary.reduce((sum, s) => sum + s.totalSales, 0);
-    const totalOrders = salesSummary.reduce((sum, s) => sum + s.orderCount, 0);
-    const totalGuests = salesSummary.reduce((sum, s) => sum + s.guestCount, 0);
+    const totalSales = salesSummary.reduce((sum, s) => sum + (s.totalSales ?? 0), 0);
+    const totalOrders = salesSummary.reduce((sum, s) => sum + (s.orderCount ?? 0), 0);
+    const totalGuests = salesSummary.reduce((sum, s) => sum + (s.guestCount ?? 0), 0);
     return {
-      totalSales,
-      totalOrders,
-      totalGuests,
+      totalSales: totalSales || 0,
+      totalOrders: totalOrders || 0,
+      totalGuests: totalGuests || 0,
       avgOrderAmount: totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0,
     };
   }, [salesSummary]);
@@ -748,13 +753,13 @@ export default function Analytics() {
                       </TableHeader>
                       <TableBody>
                         {salesSummary && salesSummary.length > 0 ? (
-                          salesSummary.map((row) => (
+                          salesSummary.filter(row => row.date && row.date !== 'undefined').map((row, index) => (
                             <TableRow 
-                              key={row.date}
+                              key={row.date || `row-${index}`}
                               className={selectedDate === row.date ? "bg-muted" : ""}
                             >
                               <TableCell>
-                                {row.date.slice(5).replace('-', '/')}({row.dayOfWeek})
+                                {row.date ? `${row.date.slice(5).replace('-', '/')}(${row.dayOfWeek || ''})` : 'N/A'}
                               </TableCell>
                               <TableCell className="text-right">{formatYen(row.totalSales)}</TableCell>
                               <TableCell className="text-right">{row.orderCount}</TableCell>

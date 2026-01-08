@@ -145,3 +145,45 @@
 - [x] GitHubリポジトリから最新変更をプル（Register.tsx AirPay風リファクタリング、RBAC調整、新テストケース追加）
 - [x] リモート変更で再発したTypeScriptエラーを修正（party.ts PartyRow型定義、ticket.ts null値処理）
 - [x] 全26件のテスト通過、TypeScriptエラーなし
+
+
+## バグ修正（2026-01-08 - Analyticsページ）
+- [x] /analytics/1ページで発生していた「重複したkey（undefined）」警告を修正（seatTypeNameのバリデーション強化、filterで空値除外）
+- [x] NaN値が表示される問題を修正（statsのデフォルト値を適切な型に統一、??演算子でnull/undefined対策）
+- [x] waitTimeByHourのseatTypeNamesに空値が含まれないように修正
+
+
+## バグ修正（2026-01-08 - Analytics残りのエラー）
+- [x] Analyticsコンポーネントで「Each child in a list should have a unique "key" prop」警告を修正（テーブルとグラフのkeyにフォールバック追加）
+- [x] 重複したkey（undefined）警告を完全に解消（salesChartDataとsalesSummaryのfilterでundefined除外）
+- [x] NaN値が表示される問題を完全に解消（formatYen関数、salesTotals、salesChartDataのNaN対策強化）
+
+
+## バグ修正（2026-01-08 - Registerページ）
+- [x] 「本日のレジセッションは既に締め済みです」エラーを修正（複数シフト対応：締め済みセッションがあっても新規セッションを作成可能に）
+- [x] 「<button> cannot contain a nested <button>」HTML構造エラーを修正（Link内のButtonをasChild属性で修正）
+- [x] 「伝票が見つかりません」エラーを修正（ticket.getクエリのenabled条件を強化し、activeTicketIdがnullまたは0の場合はクエリを実行しないように修正）
+
+
+## バグ修正（2026-01-08 - レジセッションエラー再発）
+- [x] /register/1ページで再発していた「本日のレジセッションは既に締め済みです」エラーを修正
+- [x] getCurrentSessionクエリをgetCurrentRegisterSession関数を使用するように修正（最新の開いているセッションを返す）
+- [x] 複数シフト対応を完全に実装（同じ日に複数のセッションを作成・管理可能）
+
+
+## バグ修正（2026-01-09 - KitchenDisplay TypeScriptエラー）
+- [x] KitchenDisplay.tsxで発生していたTypeScriptエラーを修正（order.list APIの返り値とKitchenOrder型の不一致）
+- [x] KitchenOrder型定義をサーバーの実際の返り値に合わせて拡張（storeId, partyId, routeToKitchen等のオプショナルフィールド追加）
+- [x] orderedAtフィールドの型をstring | Dateに修正し、getElapsedMinutes関数に型ガード追加
+- [x] ToppingDialog.tsxのMenuModifier型定義をnull許容に修正（price, isRequired, maxSelections）
+- [x] toggleModifier関数でpriceがnullの場合に0として扱うように修正
+- [x] 全26件のテスト通過、TypeScriptエラーなし
+- [x] キッチンディスプレイ画面の動作確認完了（正常に表示）
+
+
+## バグ修正（2026-01-09 - Cashierページ無限ループエラー）
+- [x] Cashierページ（/cashier/1）で発生している「Maximum update depth exceeded」エラーを調査
+- [x] 無限ループの原因となっているsetState呼び出しを特定
+- [x] useEffectまたはuseStateの依存配列を修正して無限ループを解消
+- [x] Cashierページの動作確認（注文作成、カート操作、商品追加）
+- [x] 全テスト通過、TypeScriptエラーなしを確認

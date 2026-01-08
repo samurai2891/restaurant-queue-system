@@ -20,9 +20,9 @@ import { useState, useEffect } from "react";
 export type MenuModifier = {
   id: number;
   name: string;
-  price: string;
-  isRequired: boolean;
-  maxSelections: number;
+  price: string | null;
+  isRequired: boolean | null;
+  maxSelections: number | null;
 };
 
 export type SelectedModifier = {
@@ -72,7 +72,8 @@ export function ToppingDialog({
       setSelectedModifiers(initialModifiers);
       setNotes(initialNotes);
     }
-  }, [open, initialModifiers, initialNotes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const toggleModifier = (modifier: MenuModifier) => {
     const existing = selectedModifiers.find((m) => m.id === modifier.id);
@@ -84,7 +85,7 @@ export function ToppingDialog({
         {
           id: modifier.id,
           name: modifier.name,
-          price: Number(modifier.price),
+          price: modifier.price ? Number(modifier.price) : 0,
           quantity: 1,
         },
       ]);

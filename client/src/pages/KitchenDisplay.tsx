@@ -48,7 +48,7 @@ type KitchenOrder = {
   id: number;
   orderNumber: number;
   status: OrderStatus;
-  orderedAt: string;
+  orderedAt: string | Date;
   notes: string | null;
   maxPrepTime: number;
   items: OrderItemWithMenu[];
@@ -61,6 +61,22 @@ type KitchenOrder = {
     allergies: string | null;
     notes: string | null;
   } | null;
+  // サーバーから返されるその他のフィールド
+  storeId?: number;
+  partyId?: number;
+  routeToKitchen?: boolean;
+  totalAmount?: string;
+  orderType?: string;
+  entrySource?: string | null;
+  paymentStatus?: string;
+  paymentMethod?: string | null;
+  paidAt?: Date | null;
+  paymentCanceledAt?: Date | null;
+  confirmedAt?: Date | null;
+  preparedAt?: Date | null;
+  servedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 // 経過時間に基づくアラートレベル
@@ -107,9 +123,9 @@ const statusConfig: Record<OrderStatus, { label: string; color: string }> = {
 };
 
 // 経過時間を計算（分）
-const getElapsedMinutes = (orderedAt: string): number => {
+const getElapsedMinutes = (orderedAt: string | Date): number => {
   const now = new Date();
-  const ordered = new Date(orderedAt);
+  const ordered = orderedAt instanceof Date ? orderedAt : new Date(orderedAt);
   return Math.floor((now.getTime() - ordered.getTime()) / 60000);
 };
 

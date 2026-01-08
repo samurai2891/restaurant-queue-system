@@ -1,0 +1,23 @@
+CREATE TABLE `register_sessions` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`storeId` int NOT NULL,
+	`sessionDate` varchar(10) NOT NULL,
+	`status` enum('open','closed') NOT NULL DEFAULT 'open',
+	`openingCash` decimal DEFAULT '0',
+	`openedByStaffId` int,
+	`openedAt` timestamp NOT NULL DEFAULT (now()),
+	`closingCash` decimal,
+	`expectedCash` decimal,
+	`cashDifference` decimal,
+	`closedByStaffId` int,
+	`closedAt` timestamp,
+	`totalSales` decimal(12,0) DEFAULT '0',
+	`cashSales` decimal(12,0) DEFAULT '0',
+	`cardSales` decimal(12,0) DEFAULT '0',
+	`otherSales` decimal(12,0) DEFAULT '0',
+	`totalTransactions` int DEFAULT 0,
+	`notes` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `register_sessions_id` PRIMARY KEY(`id`)
+);

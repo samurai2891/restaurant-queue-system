@@ -16,7 +16,8 @@ import {
   orders, InsertOrder,
   orderItems, InsertOrderItem,
   subscriptions, InsertSubscription,
-  dailyAnalytics, InsertDailyAnalytics
+  dailyAnalytics, InsertDailyAnalytics,
+  registerSessions, InsertRegisterSession
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { nanoid } from 'nanoid';
@@ -1247,13 +1248,13 @@ export async function getSalesDailySummary(
     ORDER BY date ASC
   `);
 
-  const rows: Array<{
+  const rows = (Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || []) as Array<{
     date: string;
     totalSales: string | number;
     orderCount: string | number;
     cashSales: string | number;
     otherSales: string | number;
-  }> = Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || [];
+  }>;
 
   // 商品数を取得
   const itemCountRows = await db.execute<{
@@ -1272,8 +1273,7 @@ export async function getSalesDailySummary(
     GROUP BY DATE(${orders.paidAt})
   `);
 
-  const itemRows: Array<{ date: string; itemCount: string | number }> = 
-    Array.isArray(itemCountRows) ? itemCountRows : (itemCountRows as { rows?: unknown[] }).rows || [];
+  const itemRows = (Array.isArray(itemCountRows) ? itemCountRows : (itemCountRows as { rows?: unknown[] }).rows || []) as Array<{ date: string; itemCount: string | number }>;
   const itemCountMap = new Map(itemRows.map(r => [r.date, Number(r.itemCount)]));
 
   // 客数を取得（partySize合計）
@@ -1293,8 +1293,7 @@ export async function getSalesDailySummary(
     GROUP BY DATE(${orders.paidAt})
   `);
 
-  const guestRows: Array<{ date: string; guestCount: string | number }> = 
-    Array.isArray(guestCountRows) ? guestCountRows : (guestCountRows as { rows?: unknown[] }).rows || [];
+  const guestRows = (Array.isArray(guestCountRows) ? guestCountRows : (guestCountRows as { rows?: unknown[] }).rows || []) as Array<{ date: string; guestCount: string | number }>;
   const guestCountMap = new Map(guestRows.map(r => [r.date, Number(r.guestCount)]));
 
   const dayOfWeekNames = ['日', '月', '火', '水', '木', '金', '土'];
@@ -1376,7 +1375,7 @@ export async function getSalesDailyDetail(
       AND DATE(${orders.paidAt}) = ${date}
   `);
 
-  const salesData = Array.isArray(salesRows) ? salesRows[0] : ((salesRows as { rows?: unknown[] }).rows || [])[0];
+  const salesData: { totalSales?: number; orderCount?: number; cashSales?: number; otherSales?: number } = Array.isArray(salesRows) ? salesRows[0] : ((salesRows as { rows?: unknown[] }).rows || [])[0] || {};
   const totalSales = Number(salesData?.totalSales ?? 0);
   const orderCount = Number(salesData?.orderCount ?? 0);
   const cashSales = Number(salesData?.cashSales ?? 0);
@@ -1391,7 +1390,7 @@ export async function getSalesDailyDetail(
       AND ${orders.paymentStatus} = 'paid'
       AND DATE(${orders.paidAt}) = ${date}
   `);
-  const guestData = Array.isArray(guestRows) ? guestRows[0] : ((guestRows as { rows?: unknown[] }).rows || [])[0];
+  const guestData: { guestCount?: number } = Array.isArray(guestRows) ? guestRows[0] : ((guestRows as { rows?: unknown[] }).rows || [])[0] || {};
   const guestCount = Number(guestData?.guestCount ?? 0);
 
   // 商品数と原価
@@ -1409,7 +1408,7 @@ export async function getSalesDailyDetail(
       AND ${orders.paymentStatus} = 'paid'
       AND DATE(${orders.paidAt}) = ${date}
   `);
-  const itemData = Array.isArray(itemRows) ? itemRows[0] : ((itemRows as { rows?: unknown[] }).rows || [])[0];
+  const itemData: { itemCount?: number; costTotal?: number } = Array.isArray(itemRows) ? itemRows[0] : ((itemRows as { rows?: unknown[] }).rows || [])[0] || {};
   const itemCount = Number(itemData?.itemCount ?? 0);
   const costTotal = Number(itemData?.costTotal ?? 0);
 
@@ -1492,14 +1491,14 @@ export async function getSalesByCategory(
     ORDER BY ${menuCategories.sortOrder}, ${menuCategories.name}, ${menuItems.sortOrder}, ${menuItems.name}
   `);
 
-  const rows: Array<{
+  const rows = (Array.isArray(rawRows) ? rawRows : ((rawRows as { rows?: unknown[] }).rows || [])) as Array<{
     categoryId: number;
     categoryName: string;
     menuItemId: number;
     menuItemName: string;
     quantity: string | number;
     totalAmount: string | number;
-  }> = Array.isArray(rawRows) ? rawRows : (rawRows as { rows?: unknown[] }).rows || [];
+  }>;
 
   // カテゴリーごとにグループ化
   const categoryMap = new Map<number, SalesByCategoryRow>();
@@ -1533,4 +1532,76 @@ export async function getSalesByCategory(
   }
 
   return Array.from(categoryMap.values());
+}
+
+// ============================================
+// Register Session Functions
+// ============================================
+export async function createRegisterSession(data: InsertRegisterSession) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(registerSessions).values(data);
+  return result[0].insertId;
+}
+
+export async function getRegisterSessionById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(registerSessions).where(eq(registerSessions.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getRegisterSessionByStoreAndDate(storeId: number, sessionDate: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(registerSessions)
+    .where(and(
+      eq(registerSessions.storeId, storeId),
+      eq(registerSessions.sessionDate, sessionDate)
+    ))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getCurrentRegisterSession(storeId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  // Get the most recent open session for this store
+  const result = await db.select().from(registerSessions)
+    .where(and(
+      eq(registerSessions.storeId, storeId),
+      eq(registerSessions.status, "open")
+    ))
+    .orderBy(desc(registerSessions.openedAt))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateRegisterSession(id: number, data: Partial<InsertRegisterSession>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(registerSessions).set(data).where(eq(registerSessions.id, id));
+}
+
+export async function getPaidOrdersForSession(storeId: number, startDate: Date, endDate: Date) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(orders)
+    .where(and(
+      eq(orders.storeId, storeId),
+      eq(orders.paymentStatus, "paid"),
+      gte(orders.paidAt, startDate),
+      lt(orders.paidAt, endDate)
+    ))
+    .orderBy(desc(orders.paidAt));
+}
+
+export async function getRegisterSessionHistory(storeId: number, limit: number = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(registerSessions)
+    .where(eq(registerSessions.storeId, storeId))
+    .orderBy(desc(registerSessions.sessionDate))
+    .limit(limit);
 }

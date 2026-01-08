@@ -15,6 +15,7 @@ import { subscriptionRouter } from "./routers/subscription";
 import { tableRouter } from "./routers/table";
 import { ticketRouter } from "./routers/ticket";
 import { paymentRouter } from "./routers/payment";
+import { registerRouter } from "./routers/register";
 
 // ============================================
 // Main Router
@@ -29,6 +30,7 @@ export const appRouter = router({
   party: partyRouter,
   ticket: ticketRouter,
   payment: paymentRouter,
+  register: registerRouter,
   notification: notificationRouter,
   menu: { ...menuRouter, guestCategories: menuRouter.categories, guestItems: menuRouter.items },
   order: { ...orderRouter, guestCreate: orderRouter.create, kitchen: orderRouter.list },
