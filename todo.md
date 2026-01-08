@@ -151,3 +151,9 @@
 - [x] /analytics/1ページで発生していた「重複したkey（undefined）」警告を修正（seatTypeNameのバリデーション強化、filterで空値除外）
 - [x] NaN値が表示される問題を修正（statsのデフォルト値を適切な型に統一、??演算子でnull/undefined対策）
 - [x] waitTimeByHourのseatTypeNamesに空値が含まれないように修正
+
+
+## バグ修正（2026-01-08 - Analytics残りのエラー）
+- [x] Analyticsコンポーネントで「Each child in a list should have a unique "key" prop」警告を修正（テーブルとグラフのkeyにフォールバック追加）
+- [x] 重複したkey（undefined）警告を完全に解消（salesChartDataとsalesSummaryのfilterでundefined除外）
+- [x] NaN値が表示される問題を完全に解消（formatYen関数、salesTotals、salesChartDataのNaN対策強化）
