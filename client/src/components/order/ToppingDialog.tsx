@@ -72,7 +72,8 @@ export function ToppingDialog({
       setSelectedModifiers(initialModifiers);
       setNotes(initialNotes);
     }
-  }, [open, initialModifiers, initialNotes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const toggleModifier = (modifier: MenuModifier) => {
     const existing = selectedModifiers.find((m) => m.id === modifier.id);

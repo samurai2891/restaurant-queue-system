@@ -153,50 +153,48 @@ export default function Cashier() {
     partyMode === "existing" ? Boolean(selectedPartyId) : partySizeNumber > 0
   );
 
-  // ラストオーダーチェック（1分ごと）
+  // ラストオーダーチェック（１分ごと）
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
-      lastOrderConfigs.forEach((config, partyId) => {
-        const remainingMs = config.lastOrderTime.getTime() - now.getTime();
-        const remainingMinutes = Math.floor(remainingMs / 60000);
+      // 現在の lastOrderConfigs を取得するために関数形式で更新
+      setLastOrderConfigs((prev) => {
+        const next = new Map(prev);
+        let hasChanges = false;
 
-        // 5分前に通知
-        if (remainingMinutes <= 5 && remainingMinutes > 0 && !config.notifiedAt) {
-          const party = availableParties.find((p) => p.id === partyId);
-          toast.warning(`ラストオーダー5分前: #${party?.ticketNumber ?? partyId}`, {
-            icon: <Bell className="w-5 h-5 text-amber-500" />,
-            duration: 10000,
-          });
-          setLastOrderConfigs((prev) => {
-            const next = new Map(prev);
-            const existing = next.get(partyId);
-            if (existing) {
-              next.set(partyId, { ...existing, notifiedAt: now });
-            }
-            return next;
-          });
-        }
+        prev.forEach((config, partyId) => {
+          const remainingMs = config.lastOrderTime.getTime() - now.getTime();
+          const remainingMinutes = Math.floor(remainingMs / 60000);
 
-        // ラストオーダー時間到達
-        if (remainingMinutes <= 0 && config.notifiedAt && (now.getTime() - config.notifiedAt.getTime()) > 60000) {
-          const party = availableParties.find((p) => p.id === partyId);
-          toast.error(`ラストオーダー時間です: #${party?.ticketNumber ?? partyId}`, {
-            icon: <Timer className="w-5 h-5 text-red-500" />,
-            duration: 15000,
-          });
-          // 削除
-          setLastOrderConfigs((prev) => {
-            const next = new Map(prev);
+          // 5分前に通知
+          if (remainingMinutes <= 5 && remainingMinutes > 0 && !config.notifiedAt) {
+            const party = availableParties.find((p) => p.id === partyId);
+            toast.warning(`ラストオーダー5分前: #${party?.ticketNumber ?? partyId}`, {
+              icon: <Bell className="w-5 h-5 text-amber-500" />,
+              duration: 10000,
+            });
+            next.set(partyId, { ...config, notifiedAt: now });
+            hasChanges = true;
+          }
+
+          // ラストオーダー時間到達
+          if (remainingMinutes <= 0 && config.notifiedAt && (now.getTime() - config.notifiedAt.getTime()) > 60000) {
+            const party = availableParties.find((p) => p.id === partyId);
+            toast.error(`ラストオーダー時間です: #${party?.ticketNumber ?? partyId}`, {
+              icon: <Timer className="w-5 h-5 text-red-500" />,
+              duration: 15000,
+            });
             next.delete(partyId);
-            return next;
-          });
-        }
+            hasChanges = true;
+          }
+        });
+
+        return hasChanges ? next : prev;
       });
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [lastOrderConfigs, availableParties]);
+  }, [availableParties]);
 
   // メニューアイテムクリック時
   const handleMenuItemClick = (item: MenuItem) => {

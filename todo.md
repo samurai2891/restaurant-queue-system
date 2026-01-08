@@ -179,3 +179,11 @@
 - [x] toggleModifier関数でpriceがnullの場合に0として扱うように修正
 - [x] 全26件のテスト通過、TypeScriptエラーなし
 - [x] キッチンディスプレイ画面の動作確認完了（正常に表示）
+
+
+## バグ修正（2026-01-09 - Cashierページ無限ループエラー）
+- [x] Cashierページ（/cashier/1）で発生している「Maximum update depth exceeded」エラーを調査
+- [x] 無限ループの原因となっているsetState呼び出しを特定
+- [x] useEffectまたはuseStateの依存配列を修正して無限ループを解消
+- [x] Cashierページの動作確認（注文作成、カート操作、商品追加）
+- [x] 全テスト通過、TypeScriptエラーなしを確認
