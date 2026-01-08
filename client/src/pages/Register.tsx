@@ -17,7 +17,10 @@ import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
   CheckCircle2,
+  ClipboardList,
+  DollarSign,
   Loader2,
+  Lock,
   Minus,
   Pencil,
   Plus,
@@ -25,6 +28,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
@@ -76,6 +80,14 @@ export default function Register() {
   const [cashReceived, setCashReceived] = useState("");
   const [manualMethod, setManualMethod] = useState("card");
   const [completed, setCompleted] = useState<null | { totalAmount: number; changeAmount?: number }>(null);
+
+  // Register session states
+  const [paymentHistoryOpen, setPaymentHistoryOpen] = useState(false);
+  const [openSessionOpen, setOpenSessionOpen] = useState(false);
+  const [openingCashInput, setOpeningCashInput] = useState("");
+  const [closeSessionOpen, setCloseSessionOpen] = useState(false);
+  const [closingCashInput, setClosingCashInput] = useState("");
+  const [closeNotes, setCloseNotes] = useState("");
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -213,6 +225,38 @@ export default function Register() {
       refetchTicket();
       refetchTickets();
       refetchParties();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // Register session queries and mutations
+  const { data: currentSession, refetch: refetchSession } = trpc.register.getCurrentSession.useQuery(
+    { storeId: storeIdNum },
+    { enabled: isAuthenticated && storeIdNum > 0 }
+  );
+
+  const { data: paymentHistory, isLoading: paymentHistoryLoading, refetch: refetchPaymentHistory } = trpc.register.getPaymentHistory.useQuery(
+    { storeId: storeIdNum },
+    { enabled: isAuthenticated && storeIdNum > 0 && (paymentHistoryOpen || closeSessionOpen) }
+  );
+
+  const openSessionMutation = trpc.register.openSession.useMutation({
+    onSuccess: () => {
+      toast.success("レジセッションを開始しました");
+      refetchSession();
+      setOpenSessionOpen(false);
+      setOpeningCashInput("");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const closeSessionMutation = trpc.register.closeSession.useMutation({
+    onSuccess: (res) => {
+      toast.success("レジ締めを完了しました");
+      refetchSession();
+      setCloseSessionOpen(false);
+      setClosingCashInput("");
+      setCloseNotes("");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -450,6 +494,40 @@ export default function Register() {
             )}
       </div>
           <div className="flex items-center gap-2">
+            {currentSession ? (
+              <Badge variant="outline" className="text-green-600 border-green-600">
+                <DollarSign className="w-3 h-3 mr-1" />
+                営業中
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground">
+                未開店
+              </Badge>
+            )}
+            {!currentSession && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setOpenSessionOpen(true)}
+                disabled={storeIdNum <= 0}
+                className="gap-1"
+              >
+                <DollarSign className="w-4 h-4" />
+                開店入金
+              </Button>
+            )}
+            {currentSession && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCloseSessionOpen(true)}
+                disabled={storeIdNum <= 0}
+                className="gap-1"
+              >
+                <Lock className="w-4 h-4" />
+                レジ締め
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -457,6 +535,7 @@ export default function Register() {
                 refetchTickets();
                 refetchParties();
                 refetchTicket();
+                refetchSession();
               }}
               disabled={ticketsLoading || partiesLoading || ticketLoading}
             >
@@ -520,6 +599,18 @@ export default function Register() {
                 >
                   <Plus className="w-4 h-4" />
                   メモ伝票
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPaymentHistoryOpen(true);
+                    refetchPaymentHistory();
+                  }}
+                  disabled={storeIdNum <= 0}
+                  className="gap-2 col-span-2"
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  会計履歴
                 </Button>
               </div>
 
@@ -1297,6 +1388,295 @@ export default function Register() {
       </Card>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment History Dialog */}
+      <Dialog open={paymentHistoryOpen} onOpenChange={setPaymentHistoryOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5" />
+              今日の会計履歴
+            </DialogTitle>
+            <DialogDescription>
+              本日の会計済み伝票の一覧です
+            </DialogDescription>
+          </DialogHeader>
+
+          {paymentHistoryLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="text-sm text-muted-foreground">取引件数</div>
+                    <div className="text-2xl font-bold">{paymentHistory?.summary.totalTransactions ?? 0}件</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="text-sm text-muted-foreground">売上合計</div>
+                    <div className="text-2xl font-bold text-primary">
+                      ¥{(paymentHistory?.summary.totalSales ?? 0).toLocaleString()}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <div className="rounded-lg border p-3">
+                  <div className="text-muted-foreground">現金</div>
+                  <div className="font-semibold">¥{(paymentHistory?.summary.cashSales ?? 0).toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-muted-foreground">カード</div>
+                  <div className="font-semibold">¥{(paymentHistory?.summary.cardSales ?? 0).toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <div className="text-muted-foreground">その他</div>
+                  <div className="font-semibold">¥{(paymentHistory?.summary.otherSales ?? 0).toLocaleString()}</div>
+                </div>
+              </div>
+
+              <ScrollArea className="h-[40vh]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>伝票</TableHead>
+                      <TableHead>テーブル</TableHead>
+                      <TableHead>金額</TableHead>
+                      <TableHead>支払方法</TableHead>
+                      <TableHead>時刻</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(paymentHistory?.orders ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          会計履歴がありません
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (paymentHistory?.orders ?? []).map((order) => (
+                        <TableRow key={order.id}>
+                          <TableCell>#{order.ticketNumber ?? order.orderNumber}</TableCell>
+                          <TableCell>{order.tableLabel ?? "-"}</TableCell>
+                          <TableCell className="font-semibold">¥{order.totalAmount.toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {order.paymentMethod === "cash" ? "現金" :
+                               order.paymentMethod === "card" ? "カード" :
+                               order.paymentMethod ?? "-"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {order.paidAt ? new Date(order.paidAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentHistoryOpen(false)}>
+              閉じる
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Open Session Dialog */}
+      <Dialog open={openSessionOpen} onOpenChange={setOpenSessionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5" />
+              開店入金
+            </DialogTitle>
+            <DialogDescription>
+              営業開始時のレジ内現金を入力してください
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="opening-cash">開店時の現金額</Label>
+              <Input
+                id="opening-cash"
+                type="number"
+                min={0}
+                value={openingCashInput}
+                onChange={(e) => setOpeningCashInput(e.target.value)}
+                placeholder="例: 30000"
+              />
+              <p className="text-sm text-muted-foreground">
+                レジに入れるつり銭の準備金額を入力してください
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenSessionOpen(false)}>
+              キャンセル
+            </Button>
+            <Button
+              onClick={() => {
+                const amount = Number(openingCashInput) || 0;
+                openSessionMutation.mutate({
+                  storeId: storeIdNum,
+                  openingCash: amount,
+                });
+              }}
+              disabled={openSessionMutation.isPending}
+            >
+              {openSessionMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : null}
+              開店する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Session Dialog */}
+      <Dialog open={closeSessionOpen} onOpenChange={setCloseSessionOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5" />
+              レジ締め
+            </DialogTitle>
+            <DialogDescription>
+              本日の営業を締めて売上を確定します
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {paymentHistory && currentSession && (
+              <>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">本日の売上</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">取引件数</span>
+                      <span className="font-semibold">{paymentHistory.summary.totalTransactions}件</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">売上合計</span>
+                      <span className="font-semibold text-primary">¥{paymentHistory.summary.totalSales.toLocaleString()}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">現金売上</span>
+                      <span>¥{paymentHistory.summary.cashSales.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">カード売上</span>
+                      <span>¥{paymentHistory.summary.cardSales.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">その他売上</span>
+                      <span>¥{paymentHistory.summary.otherSales.toLocaleString()}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">現金チェック</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">開店時の現金</span>
+                      <span>¥{Number(currentSession.openingCash ?? 0).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">現金売上</span>
+                      <span>+ ¥{paymentHistory.summary.cashSales.toLocaleString()}</span>
+                    </div>
+                    <Separator />
+                    <div className="flex justify-between text-sm font-semibold">
+                      <span>期待現金額</span>
+                      <span className="text-primary">
+                        ¥{(Number(currentSession.openingCash ?? 0) + paymentHistory.summary.cashSales).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      <Label htmlFor="closing-cash">実際の現金額</Label>
+                      <Input
+                        id="closing-cash"
+                        type="number"
+                        min={0}
+                        value={closingCashInput}
+                        onChange={(e) => setClosingCashInput(e.target.value)}
+                        placeholder="レジ内の現金を数えて入力"
+                      />
+                    </div>
+
+                    {closingCashInput && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">過不足</span>
+                        <span className={`font-semibold ${
+                          Number(closingCashInput) - (Number(currentSession.openingCash ?? 0) + paymentHistory.summary.cashSales) === 0
+                            ? "text-green-600"
+                            : Number(closingCashInput) - (Number(currentSession.openingCash ?? 0) + paymentHistory.summary.cashSales) > 0
+                            ? "text-blue-600"
+                            : "text-red-600"
+                        }`}>
+                          {Number(closingCashInput) - (Number(currentSession.openingCash ?? 0) + paymentHistory.summary.cashSales) >= 0 ? "+" : ""}
+                          ¥{(Number(closingCashInput) - (Number(currentSession.openingCash ?? 0) + paymentHistory.summary.cashSales)).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-2">
+                  <Label htmlFor="close-notes">メモ（任意）</Label>
+                  <Textarea
+                    id="close-notes"
+                    value={closeNotes}
+                    onChange={(e) => setCloseNotes(e.target.value)}
+                    placeholder="特記事項があれば記入"
+                    rows={2}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCloseSessionOpen(false)}>
+              キャンセル
+            </Button>
+            <Button
+              onClick={() => {
+                const amount = Number(closingCashInput) || 0;
+                closeSessionMutation.mutate({
+                  storeId: storeIdNum,
+                  closingCash: amount,
+                  notes: closeNotes.trim() || undefined,
+                });
+              }}
+              disabled={closeSessionMutation.isPending || !closingCashInput}
+            >
+              {closeSessionMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : null}
+              レジ締めを確定
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
