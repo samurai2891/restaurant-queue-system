@@ -11,7 +11,18 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useMenuCart, type MenuItem } from "@/hooks/useMenuCart";
+import { ToppingDialog, type ToppingDialogResult } from "@/components/order/ToppingDialog";
+import { CartPanel } from "@/components/order/CartPanel";
+import { ElapsedTimeCompact } from "@/components/order/ElapsedTime";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
@@ -21,8 +32,12 @@ import {
   Minus,
   Plus,
   Trash2,
+  Clock,
+  AlertTriangle,
+  Timer,
+  Bell,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useParams } from "wouter";
 import { toast } from "sonner";
 
@@ -34,6 +49,16 @@ type PartyOption = {
   guestName?: string | null;
   partySize: number;
   status: PartyStatus;
+  seatedAt?: string | null;
+  allergies?: string | null;
+  notes?: string | null;
+};
+
+// ラストオーダー設定型
+type LastOrderConfig = {
+  partyId: number;
+  lastOrderTime: Date;
+  notifiedAt?: Date;
 };
 
 export default function Cashier() {
@@ -48,6 +73,15 @@ export default function Cashier() {
   const [notes, setNotes] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [isOrderTargetExpanded, setIsOrderTargetExpanded] = useState(false);
+
+  // Topping Dialog
+  const [toppingDialogOpen, setToppingDialogOpen] = useState(false);
+  const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
+
+  // Last Order Management
+  const [lastOrderConfigs, setLastOrderConfigs] = useState<Map<number, LastOrderConfig>>(new Map());
+  const [lastOrderDialogOpen, setLastOrderDialogOpen] = useState(false);
+  const [lastOrderMinutes, setLastOrderMinutes] = useState("60");
 
   const { data: store, isLoading: storeLoading } = trpc.store.get.useQuery(
     { id: storeIdNum },
@@ -85,10 +119,15 @@ export default function Cashier() {
   const availableParties = useMemo(
     () =>
       (parties as PartyOption[] | undefined)?.filter(
-        (party) => party.status === "waiting" || party.status === "arrived"
+        (party) => party.status === "waiting" || party.status === "arrived" || party.status === "seated"
       ) ?? [],
     [parties]
   );
+
+  const selectedParty = useMemo(() => {
+    if (!selectedPartyId) return undefined;
+    return availableParties.find((p) => p.id.toString() === selectedPartyId);
+  }, [availableParties, selectedPartyId]);
 
   const selectedPartyLabel = useMemo(() => {
     if (partyMode === "existing") {
@@ -113,6 +152,104 @@ export default function Cashier() {
   const canSubmit = cart.length > 0 && (
     partyMode === "existing" ? Boolean(selectedPartyId) : partySizeNumber > 0
   );
+
+  // ラストオーダーチェック（1分ごと）
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      lastOrderConfigs.forEach((config, partyId) => {
+        const remainingMs = config.lastOrderTime.getTime() - now.getTime();
+        const remainingMinutes = Math.floor(remainingMs / 60000);
+
+        // 5分前に通知
+        if (remainingMinutes <= 5 && remainingMinutes > 0 && !config.notifiedAt) {
+          const party = availableParties.find((p) => p.id === partyId);
+          toast.warning(`ラストオーダー5分前: #${party?.ticketNumber ?? partyId}`, {
+            icon: <Bell className="w-5 h-5 text-amber-500" />,
+            duration: 10000,
+          });
+          setLastOrderConfigs((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(partyId);
+            if (existing) {
+              next.set(partyId, { ...existing, notifiedAt: now });
+            }
+            return next;
+          });
+        }
+
+        // ラストオーダー時間到達
+        if (remainingMinutes <= 0 && config.notifiedAt && (now.getTime() - config.notifiedAt.getTime()) > 60000) {
+          const party = availableParties.find((p) => p.id === partyId);
+          toast.error(`ラストオーダー時間です: #${party?.ticketNumber ?? partyId}`, {
+            icon: <Timer className="w-5 h-5 text-red-500" />,
+            duration: 15000,
+          });
+          // 削除
+          setLastOrderConfigs((prev) => {
+            const next = new Map(prev);
+            next.delete(partyId);
+            return next;
+          });
+        }
+      });
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [lastOrderConfigs, availableParties]);
+
+  // メニューアイテムクリック時
+  const handleMenuItemClick = (item: MenuItem) => {
+    const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
+    if (isSoldOut) return;
+
+    // トッピングダイアログを表示
+    setSelectedMenuItem(item);
+    setToppingDialogOpen(true);
+  };
+
+  // トッピング選択後
+  const handleToppingConfirm = (result: ToppingDialogResult) => {
+    if (!selectedMenuItem) return;
+    addToCart(selectedMenuItem, {
+      modifiers: result.modifiers,
+      notes: result.notes,
+    });
+    setSelectedMenuItem(null);
+  };
+
+  // ラストオーダー設定
+  const handleSetLastOrder = () => {
+    if (!selectedPartyId) return;
+    const partyId = Number.parseInt(selectedPartyId, 10);
+    const minutes = Number.parseInt(lastOrderMinutes, 10);
+    if (!Number.isFinite(minutes) || minutes <= 0) return;
+
+    const lastOrderTime = new Date(Date.now() + minutes * 60000);
+    setLastOrderConfigs((prev) => {
+      const next = new Map(prev);
+      next.set(partyId, { partyId, lastOrderTime });
+      return next;
+    });
+
+    toast.success(`ラストオーダーを${minutes}分後に設定しました`);
+    setLastOrderDialogOpen(false);
+  };
+
+  // ラストオーダー残り時間取得
+  const getLastOrderRemaining = (partyId: number): string | null => {
+    const config = lastOrderConfigs.get(partyId);
+    if (!config) return null;
+
+    const remainingMs = config.lastOrderTime.getTime() - Date.now();
+    if (remainingMs <= 0) return "時間です";
+
+    const minutes = Math.floor(remainingMs / 60000);
+    if (minutes < 60) return `${minutes}分`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}時間${mins}分`;
+  };
 
   const handleSubmitOrder = async () => {
     if (cart.length === 0) {
@@ -154,6 +291,8 @@ export default function Cashier() {
         items: cart.map((item) => ({
           menuItemId: item.menuItemId,
           quantity: item.quantity,
+          modifiers: item.modifiers,
+          notes: item.notes,
         })),
         notes: notes || undefined,
         status: "served",
@@ -215,6 +354,64 @@ export default function Cashier() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
+      {/* Topping Dialog */}
+      <ToppingDialog
+        open={toppingDialogOpen}
+        onOpenChange={setToppingDialogOpen}
+        menuItem={selectedMenuItem}
+        onConfirm={handleToppingConfirm}
+      />
+
+      {/* Last Order Dialog */}
+      <Dialog open={lastOrderDialogOpen} onOpenChange={setLastOrderDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Timer className="w-5 h-5" />
+              ラストオーダー設定
+            </DialogTitle>
+            <DialogDescription>
+              指定時間後にラストオーダーの通知を表示します
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>何分後にラストオーダーですか？</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  value={lastOrderMinutes}
+                  onChange={(e) => setLastOrderMinutes(e.target.value)}
+                  min={1}
+                  className="w-24"
+                />
+                <span className="text-muted-foreground">分後</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {[30, 45, 60, 90].map((min) => (
+                <Button
+                  key={min}
+                  variant={lastOrderMinutes === String(min) ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setLastOrderMinutes(String(min))}
+                >
+                  {min}分
+                </Button>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLastOrderDialogOpen(false)}>
+              キャンセル
+            </Button>
+            <Button onClick={handleSetLastOrder}>
+              設定する
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ヘッダー */}
       <header className="shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center justify-between px-4">
@@ -245,7 +442,7 @@ export default function Cashier() {
 
           {/* 左カラム */}
           <div className="flex min-h-0 flex-col border-r bg-muted/10">
-            {/* 注文先選択 - スマホ: 折りたたみ可能 / PC: 常に展開 */}
+            {/* 注文先選択 */}
             <div className="shrink-0 p-3 lg:p-4 space-y-4">
               {/* スマホ用: 折りたたみ可能なコンパクト表示 */}
               <div className="lg:hidden">
@@ -381,13 +578,61 @@ export default function Cashier() {
                                 対象の受付がありません
                               </SelectItem>
                             )}
-                            {availableParties.map((party) => (
-                              <SelectItem key={party.id} value={party.id.toString()}>
-                                #{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)
-                              </SelectItem>
-                            ))}
+                            {availableParties.map((party) => {
+                              const lastOrderRemaining = getLastOrderRemaining(party.id);
+                              return (
+                                <SelectItem key={party.id} value={party.id.toString()}>
+                                  <div className="flex items-center justify-between w-full gap-2">
+                                    <span>#{party.ticketNumber} {party.guestName ?? "お客様"} ({party.partySize}名)</span>
+                                    {lastOrderRemaining && (
+                                      <Badge variant="destructive" className="text-xs">
+                                        LO {lastOrderRemaining}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
+
+                        {/* 選択中の受付情報 */}
+                        {selectedParty && (
+                          <div className="space-y-2 pt-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">滞在時間</span>
+                              {selectedParty.seatedAt && (
+                                <ElapsedTimeCompact startTime={selectedParty.seatedAt} thresholdMinutes={90} />
+                              )}
+                            </div>
+                            {selectedParty.allergies && (
+                              <div className="flex items-center gap-2 text-sm text-amber-600">
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>アレルギー: {selectedParty.allergies}</span>
+                              </div>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => setLastOrderDialogOpen(true)}
+                            >
+                              <Timer className="w-4 h-4 mr-2" />
+                              ラストオーダー設定
+                            </Button>
+                            {lastOrderConfigs.has(Number(selectedPartyId)) && (
+                              <div className="flex items-center justify-between text-sm bg-amber-50 dark:bg-amber-950/30 p-2 rounded">
+                                <span className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                                  <Clock className="w-4 h-4" />
+                                  ラストオーダーまで
+                                </span>
+                                <span className="font-bold text-amber-700 dark:text-amber-300">
+                                  {getLastOrderRemaining(Number(selectedPartyId))}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -417,104 +662,25 @@ export default function Cashier() {
               </div>
             </div>
 
-            {/* カート詳細（PCのみ・スクロール可能） */}
+            {/* カート詳細（PCのみ） */}
             <div className="hidden lg:flex flex-1 min-h-0 flex-col px-4 pb-4">
-              <Card className="flex flex-1 min-h-0 flex-col">
-                <CardHeader className="shrink-0 pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    カート
-                    <Badge variant="outline">{totalItems}点</Badge>
-                  </CardTitle>
-                  <CardDescription>注文内容を確認</CardDescription>
-                </CardHeader>
-                <CardContent className="flex flex-1 min-h-0 flex-col">
-                  <ScrollArea className="flex-1 min-h-0 pr-2">
-                    {cart.length === 0 ? (
-                      <div className="text-center py-6 text-muted-foreground">
-                        カートは空です
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {cart.map((item) => (
-                          <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium line-clamp-1">{item.name}</p>
-                              <p className="text-sm text-primary font-bold">
-                                ¥{(item.price * item.quantity).toLocaleString()}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="w-8 h-8 rounded-full"
-                                onClick={() => {
-                                  if (item.quantity === 1) {
-                                    removeFromCart(item.menuItemId);
-                                  } else {
-                                    updateQuantity(item.menuItemId, -1);
-                                  }
-                                }}
-                              >
-                                {item.quantity === 1 ? (
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                ) : (
-                                  <Minus className="w-4 h-4" />
-                                )}
-                              </Button>
-                              <span className="w-8 text-center font-bold">{item.quantity}</span>
-                              <Button
-                                variant="outline"
-                                size="icon"
-                                className="w-8 h-8 rounded-full"
-                                onClick={() => updateQuantity(item.menuItemId, 1)}
-                              >
-                                <Plus className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </ScrollArea>
-
-                  {cart.length > 0 && (
-                    <div className="shrink-0 pt-4 space-y-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="orderNotes">備考（任意）</Label>
-                        <Textarea
-                          id="orderNotes"
-                          placeholder="アレルギーや特別なリクエストなど"
-                          value={notes}
-                          onChange={(event) => setNotes(event.target.value)}
-                          rows={2}
-                        />
-                      </div>
-                      <Separator />
-                      <div className="flex items-center justify-between text-sm font-medium">
-                        <span>小計</span>
-                        <span>¥{totalAmount.toLocaleString()}</span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={clearCart}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        カートをクリア
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <CartPanel
+                cart={cart}
+                totalAmount={totalAmount}
+                totalItems={totalItems}
+                notes={notes}
+                onNotesChange={setNotes}
+                onQuantityChange={(menuItemId, delta) => updateQuantity(menuItemId, delta)}
+                onRemove={(menuItemId) => removeFromCart(menuItemId)}
+                onClear={clearCart}
+                showNotes={true}
+              />
             </div>
           </div>
 
           {/* 右カラム */}
           <div className="flex min-h-0 flex-col">
-            {/* カテゴリタブ（スティッキー） */}
+            {/* カテゴリタブ */}
             <div className="shrink-0 p-2 lg:p-4 border-b sticky top-0 z-10 bg-background">
               <Tabs value={activeCategory} onValueChange={setActiveCategory}>
                 <ScrollArea className="w-full">
@@ -539,25 +705,24 @@ export default function Cashier() {
               </Tabs>
             </div>
 
-            {/* メニューグリッド（スクロール可能） */}
+            {/* メニューグリッド */}
             <ScrollArea className="flex-1 min-h-0">
               <div className="p-2 lg:p-4">
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4 lg:gap-3">
                   {filteredItems.map((item) => {
                     const isSoldOut = !item.isAvailable || (item.stockCount !== null && item.stockCount <= 0);
-                    const cartItem = cart.find((c) => c.menuItemId === item.id);
-                    const inCart = Boolean(cartItem);
+                    const cartQty = cart
+                      .filter((c) => c.menuItemId === item.id)
+                      .reduce((sum, c) => sum + c.quantity, 0);
+                    const inCart = cartQty > 0;
+
                     return (
                       <button
                         key={item.id}
                         type="button"
                         className="text-left"
-                        onClick={() => {
-                          if (!isSoldOut && !inCart) {
-                            addToCart(item);
-                          }
-                        }}
-                        disabled={isSoldOut && !inCart}
+                        onClick={() => handleMenuItemClick(item)}
+                        disabled={isSoldOut}
                       >
                         <Card
                           className={`h-full transition-all duration-200 ${
@@ -574,7 +739,7 @@ export default function Cashier() {
                                 <Badge variant="secondary" className="text-xs">売切れ</Badge>
                               )}
                             </div>
-                            {cartItem && (
+                            {inCart && (
                               <div className="flex items-center justify-between gap-1 lg:gap-2 pt-2 border-t">
                                 <Button
                                   variant="outline"
@@ -582,24 +747,24 @@ export default function Cashier() {
                                   className="h-8 w-8 lg:h-10 lg:w-10 rounded-full"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (cartItem.quantity === 1) removeFromCart(cartItem.menuItemId);
-                                    else updateQuantity(cartItem.menuItemId, -1);
+                                    if (cartQty === 1) removeFromCart(item.id);
+                                    else updateQuantity(item.id, -1);
                                   }}
                                 >
-                                  {cartItem.quantity === 1 ? (
+                                  {cartQty === 1 ? (
                                     <Trash2 className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-red-500" />
                                   ) : (
                                     <Minus className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
                                   )}
                                 </Button>
-                                <div className="text-center font-bold text-base lg:text-lg">{cartItem.quantity}点</div>
+                                <div className="text-center font-bold text-base lg:text-lg">{cartQty}点</div>
                                 <Button
                                   variant="outline"
                                   size="icon"
                                   className="h-8 w-8 lg:h-10 lg:w-10 rounded-full"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    updateQuantity(cartItem.menuItemId, 1);
+                                    updateQuantity(item.id, 1);
                                   }}
                                 >
                                   <Plus className="h-3.5 w-3.5 lg:h-4 lg:w-4" />
@@ -622,7 +787,7 @@ export default function Cashier() {
       <Sheet>
         <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex items-center gap-3 px-4 py-3">
-            {/* スマホ: カート概要（タップでSheet表示） */}
+            {/* スマホ: カート概要 */}
             <SheetTrigger asChild className="lg:hidden flex-1">
               <button
                 type="button"
@@ -678,81 +843,18 @@ export default function Cashier() {
             <SheetDescription>注文内容を確認できます</SheetDescription>
           </SheetHeader>
           <ScrollArea className="flex-1 h-full px-4 pt-4">
-            <div className="space-y-4">
-              {cart.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground">
-                  カートは空です
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {cart.map((item) => (
-                    <div key={item.menuItemId} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium line-clamp-1">{item.name}</p>
-                        <p className="text-sm text-primary font-bold">
-                          ¥{(item.price * item.quantity).toLocaleString()}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="w-8 h-8 rounded-full"
-                          onClick={() => {
-                            if (item.quantity === 1) {
-                              removeFromCart(item.menuItemId);
-                            } else {
-                              updateQuantity(item.menuItemId, -1);
-                            }
-                          }}
-                        >
-                          {item.quantity === 1 ? (
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          ) : (
-                            <Minus className="w-4 h-4" />
-                          )}
-                        </Button>
-                        <span className="w-8 text-center font-bold">{item.quantity}</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="w-8 h-8 rounded-full"
-                          onClick={() => updateQuantity(item.menuItemId, 1)}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="pt-2 space-y-2">
-                    <Label htmlFor="orderNotesMobile">備考（任意）</Label>
-                    <Textarea
-                      id="orderNotesMobile"
-                      placeholder="アレルギーや特別なリクエストなど"
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                      rows={3}
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between text-sm font-medium">
-                    <span>小計</span>
-                    <span>¥{totalAmount.toLocaleString()}</span>
-                  </div>
-                </div>
-              )}
-
-              {cart.length > 0 && (
-                <Button variant="outline" className="w-full" onClick={clearCart}>
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  カートをクリア
-                </Button>
-              )}
-            </div>
+            <CartPanel
+              cart={cart}
+              totalAmount={totalAmount}
+              totalItems={totalItems}
+              notes={notes}
+              onNotesChange={setNotes}
+              onQuantityChange={(menuItemId, delta) => updateQuantity(menuItemId, delta)}
+              onRemove={(menuItemId) => removeFromCart(menuItemId)}
+              onClear={clearCart}
+              compact={true}
+              showNotes={true}
+            />
           </ScrollArea>
         </SheetContent>
       </Sheet>

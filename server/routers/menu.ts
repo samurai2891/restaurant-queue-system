@@ -83,11 +83,18 @@ export const menuRouter = router({
       return { success: true };
     }),
 
-  // モディファイア取得
+  // モディファイア取得（商品単位）
   modifiers: publicProcedure
     .input(z.object({ menuItemId: z.number() }))
     .query(async ({ input }) => {
       return db.getMenuModifiersByItemId(input.menuItemId);
+    }),
+
+  // 店舗全体のモディファイア取得
+  allModifiers: publicProcedure
+    .input(z.object({ storeId: z.number() }))
+    .query(async ({ input }) => {
+      return db.getMenuModifiersByStoreId(input.storeId);
     }),
 
   // モディファイア作成

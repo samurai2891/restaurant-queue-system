@@ -22,12 +22,35 @@ export const orderRouter = router({
       const orders = await db.getOrdersByStoreId(input.storeId);
       const kitchenOrders = orders.filter(order => order.routeToKitchen);
 
-      // 注文明細を付加
+      // 注文明細を付加（メニュー詳細含む）
       const ordersWithItems = await Promise.all(
         kitchenOrders.map(async (order) => {
           const items = await db.getOrderItemsByOrderId(order.id);
           const party = await db.getPartyById(order.partyId);
-          return { ...order, items, party };
+          
+          // 各アイテムにメニュー詳細を付加
+          const itemsWithMenu = await Promise.all(
+            items.map(async (item) => {
+              const menuItem = await db.getMenuItemById(item.menuItemId);
+              return {
+                ...item,
+                menuItem: menuItem ? {
+                  id: menuItem.id,
+                  name: menuItem.name,
+                  prepTimeMinutes: menuItem.prepTimeMinutes,
+                  imageUrl: menuItem.imageUrl,
+                } : null,
+              };
+            })
+          );
+          
+          // 注文全体の最大調理時間を計算
+          const maxPrepTime = Math.max(
+            ...itemsWithMenu.map(i => i.menuItem?.prepTimeMinutes ?? 10),
+            10
+          );
+          
+          return { ...order, items: itemsWithMenu, party, maxPrepTime };
         })
       );
 
@@ -330,5 +353,46 @@ export const orderRouter = router({
       );
 
       return ordersWithItems;
+    }),
+
+  // テーブル訂正: 注文を別の伝票に移動
+  moveToTicket: protectedProcedure
+    .input(z.object({
+      orderId: z.number(),
+      storeId: z.number(),
+      newTicketId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await checkStoreAccess(ctx.user.id, input.storeId, ["owner", "manager", "cashier", "host", "staff"]);
+
+      // 注文を取得
+      const order = await db.getOrderById(input.orderId);
+      if (!order || order.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "注文が見つかりません" });
+      }
+
+      // 支払済みの注文は移動不可
+      if (order.paymentStatus === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "支払済みの注文は移動できません" });
+      }
+
+      // 移動先の伝票を確認
+      const newTicket = await db.getPartyById(input.newTicketId);
+      if (!newTicket || newTicket.storeId !== input.storeId) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "移動先の伝票が見つかりません" });
+      }
+
+      // 移動先の伝票が会計中でないことを確認
+      if (newTicket.posStatus === "PAYMENT_LOCKED") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "会計中の伝票には移動できません" });
+      }
+      if (newTicket.posStatus === "PAID" || newTicket.posStatus === "VOID") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "終了した伝票には移動できません" });
+      }
+
+      // 注文を移動
+      await db.updateOrder(input.orderId, { partyId: input.newTicketId });
+
+      return { success: true, newTicketId: input.newTicketId };
     }),
 });

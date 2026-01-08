@@ -647,6 +647,14 @@ export async function getMenuModifiersByItemId(menuItemId: number) {
     .orderBy(asc(menuModifiers.sortOrder));
 }
 
+export async function getMenuModifiersByStoreId(storeId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(menuModifiers)
+    .where(and(eq(menuModifiers.storeId, storeId), eq(menuModifiers.isActive, true)))
+    .orderBy(asc(menuModifiers.menuItemId), asc(menuModifiers.sortOrder));
+}
+
 // ============================================
 // Order Functions
 // ============================================
