@@ -22,12 +22,12 @@ export const registerRouter = router({
 
       // Check if session already exists for today
       const existing = await db.getRegisterSessionByStoreAndDate(input.storeId, sessionDate);
-      if (existing) {
-        if (existing.status === "open") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "本日のレジセッションは既に開始されています" });
-        }
-        throw new TRPCError({ code: "BAD_REQUEST", message: "本日のレジセッションは既に締め済みです" });
+      if (existing && existing.status === "open") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "本日のレジセッションは既に開始されています" });
       }
+      
+      // If a closed session exists for today, allow creating a new one (for multiple shifts)
+      // The database will handle multiple sessions per day
 
       const sessionId = await db.createRegisterSession({
         storeId: input.storeId,

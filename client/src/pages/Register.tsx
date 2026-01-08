@@ -119,7 +119,7 @@ export default function Register() {
 
   const { data: ticketData, isLoading: ticketLoading, refetch: refetchTicket } = trpc.ticket.get.useQuery(
     { storeId: storeIdNum, ticketId: activeTicketId ?? 0 },
-    { enabled: isAuthenticated && storeIdNum > 0 && Boolean(activeTicketId), refetchInterval: 5000 }
+    { enabled: isAuthenticated && storeIdNum > 0 && activeTicketId !== null && activeTicketId > 0, refetchInterval: 5000 }
   );
 
   const menuItems = items as MenuItem[] | undefined;
@@ -451,9 +451,9 @@ export default function Register() {
             <CardTitle>ログインが必要です</CardTitle>
           </CardHeader>
           <CardContent>
-            <Link href="/staff">
-              <Button className="w-full">スタッフ入口へ</Button>
-            </Link>
+            <Button asChild className="w-full">
+              <Link href="/staff">スタッフ入口へ</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -478,11 +478,11 @@ export default function Register() {
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-2">
-        <Link href={`/queue/${storeIdNum}`}>
-              <Button variant="ghost" size="icon" aria-label="戻る">
+        <Button asChild variant="ghost" size="icon" aria-label="戻る">
+          <Link href={`/queue/${storeIdNum}`}>
             <ArrowLeft className="w-5 h-5" />
-          </Button>
-        </Link>
+          </Link>
+        </Button>
             <div className="leading-tight">
               <div className="font-semibold">レジ</div>
               <div className="text-xs text-muted-foreground">{store.name}</div>
