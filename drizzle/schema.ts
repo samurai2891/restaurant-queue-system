@@ -84,6 +84,24 @@ export type StoreStaff = typeof storeStaff.$inferSelect;
 export type InsertStoreStaff = typeof storeStaff.$inferInsert;
 
 // ============================================
+// Table (テーブル/座席)
+// ============================================
+export const tables = mysqlTable("tables", {
+  id: int("id").autoincrement().primaryKey(),
+  storeId: int("storeId").notNull(),
+  name: varchar("name", { length: 50 }).notNull(), // "A-1", "テーブル1", "カウンター" など
+  maxCapacity: int("maxCapacity").default(4),
+  section: varchar("section", { length: 20 }), // グループ分け用（"A", "B", "カウンター"など）
+  sortOrder: int("sortOrder").default(0),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Table = typeof tables.$inferSelect;
+export type InsertTable = typeof tables.$inferInsert;
+
+// ============================================
 // Seat Type (席種)
 // ============================================
 export const seatTypes = mysqlTable("seat_types", {
@@ -113,6 +131,8 @@ export const parties = mysqlTable("parties", {
   storeId: int("storeId").notNull(),
   // 受付番号（店舗ごとに日次リセット）
   ticketNumber: int("ticketNumber").notNull(),
+  // テーブルID（tablesテーブルとの関連）
+  tableId: int("tableId"),
   // ゲスト情報
   guestName: varchar("guestName", { length: 100 }),
   partySize: int("partySize").notNull(),
@@ -234,6 +254,8 @@ export const menuCategories = mysqlTable("menu_categories", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   imageUrl: text("imageUrl"),
+  // カテゴリの表示色 (blue, green, yellow, red, orange, cyan, gray)
+  color: varchar("color", { length: 20 }).default("blue"),
   sortOrder: int("sortOrder").default(0),
   isActive: boolean("isActive").default(true).notNull(),
   // 提供時間帯 (JSON: { lunch: true, dinner: true })

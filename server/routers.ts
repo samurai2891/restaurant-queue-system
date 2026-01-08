@@ -12,6 +12,7 @@ import { seatTypeRouter } from "./routers/seatType";
 import { staffRouter } from "./routers/staff";
 import { storeRouter } from "./routers/store";
 import { subscriptionRouter } from "./routers/subscription";
+import { tableRouter } from "./routers/table";
 import { ticketRouter } from "./routers/ticket";
 import { paymentRouter } from "./routers/payment";
 
@@ -24,6 +25,7 @@ export const appRouter = router({
   store: { ...storeRouter, getPublic: publicStoreRouter.get },
   staff: staffRouter,
   seatType: { ...seatTypeRouter, listPublic: publicStoreRouter.seatTypes },
+  table: tableRouter,
   party: partyRouter,
   ticket: ticketRouter,
   payment: paymentRouter,

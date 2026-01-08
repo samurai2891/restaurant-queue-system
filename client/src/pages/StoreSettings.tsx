@@ -19,6 +19,7 @@ import {
   Plus,
   Trash2,
   Save,
+  Grid3X3,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -35,6 +36,18 @@ export default function StoreSettings() {
   const [newSeatTypeMax, setNewSeatTypeMax] = useState("4");
   const [newSeatTypeTotal, setNewSeatTypeTotal] = useState("10");
 
+  // Table management state
+  const [isAddTableOpen, setIsAddTableOpen] = useState(false);
+  const [isBatchAddTableOpen, setIsBatchAddTableOpen] = useState(false);
+  const [newTableName, setNewTableName] = useState("");
+  const [newTableMaxCapacity, setNewTableMaxCapacity] = useState("4");
+  const [newTableSection, setNewTableSection] = useState("");
+  // Batch add
+  const [batchPrefix, setBatchPrefix] = useState("A");
+  const [batchStartNumber, setBatchStartNumber] = useState("1");
+  const [batchCount, setBatchCount] = useState("6");
+  const [batchMaxCapacity, setBatchMaxCapacity] = useState("4");
+
   const { data: store, isLoading: storeLoading, refetch: refetchStore } = trpc.store.get.useQuery(
     { id: storeIdNum },
     { enabled: isAuthenticated && storeIdNum > 0 }
@@ -46,6 +59,11 @@ export default function StoreSettings() {
   );
 
   const { data: templates, refetch: refetchTemplates } = trpc.notification.templates.useQuery(
+    { storeId: storeIdNum },
+    { enabled: isAuthenticated && storeIdNum > 0 }
+  );
+
+  const { data: storeTables, refetch: refetchTables } = trpc.table.list.useQuery(
     { storeId: storeIdNum },
     { enabled: isAuthenticated && storeIdNum > 0 }
   );
@@ -178,6 +196,81 @@ export default function StoreSettings() {
     });
   };
 
+  // Table mutations
+  const createTableMutation = trpc.table.create.useMutation({
+    onSuccess: () => {
+      toast.success("テーブルを追加しました");
+      setIsAddTableOpen(false);
+      setNewTableName("");
+      setNewTableMaxCapacity("4");
+      setNewTableSection("");
+      refetchTables();
+    },
+    onError: (error) => {
+      toast.error(`エラー: ${error.message}`);
+    }
+  });
+
+  const createTableBatchMutation = trpc.table.createBatch.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.createdCount}件のテーブルを追加しました`);
+      setIsBatchAddTableOpen(false);
+      setBatchPrefix("A");
+      setBatchStartNumber("1");
+      setBatchCount("6");
+      setBatchMaxCapacity("4");
+      refetchTables();
+    },
+    onError: (error) => {
+      toast.error(`エラー: ${error.message}`);
+    }
+  });
+
+  const deleteTableMutation = trpc.table.delete.useMutation({
+    onSuccess: () => {
+      toast.success("テーブルを削除しました");
+      refetchTables();
+    },
+    onError: (error) => {
+      toast.error(`エラー: ${error.message}`);
+    }
+  });
+
+  const handleAddTable = () => {
+    if (!newTableName.trim()) {
+      toast.error("テーブル名を入力してください");
+      return;
+    }
+    createTableMutation.mutate({
+      storeId: storeIdNum,
+      name: newTableName,
+      maxCapacity: parseInt(newTableMaxCapacity),
+      section: newTableSection || undefined,
+    });
+  };
+
+  const handleBatchAddTables = () => {
+    if (!batchPrefix.trim()) {
+      toast.error("プレフィックスを入力してください");
+      return;
+    }
+    createTableBatchMutation.mutate({
+      storeId: storeIdNum,
+      prefix: batchPrefix,
+      startNumber: parseInt(batchStartNumber),
+      count: parseInt(batchCount),
+      maxCapacity: parseInt(batchMaxCapacity),
+      section: batchPrefix,
+    });
+  };
+
+  const handleDeleteTable = (id: number) => {
+    deleteTableMutation.mutate({
+      id,
+      storeId: storeIdNum,
+    });
+  };
+
   // storeIdがNaNの場合は管理者ダッシュボードにリダイレクト
   if (isNaN(storeIdNum) || storeIdNum <= 0) {
     return (
@@ -243,10 +336,14 @@ export default function StoreSettings() {
 
       <main className="container py-6">
         <Tabs defaultValue="general">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 flex-wrap">
             <TabsTrigger value="general" className="gap-2">
               <Settings className="w-4 h-4" />
               基本情報
+            </TabsTrigger>
+            <TabsTrigger value="tables" className="gap-2">
+              <Grid3X3 className="w-4 h-4" />
+              テーブル設定
             </TabsTrigger>
             <TabsTrigger value="seats" className="gap-2">
               <Users className="w-4 h-4" />
@@ -363,6 +460,179 @@ export default function StoreSettings() {
                   <Save className="w-4 h-4 mr-2" />
                   保存
                 </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tables */}
+          <TabsContent value="tables">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle>テーブル設定</CardTitle>
+                    <CardDescription>注文受付で使用するテーブル番号を設定します</CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Dialog open={isBatchAddTableOpen} onOpenChange={setIsBatchAddTableOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          <Plus className="w-4 h-4 mr-2" />
+                          一括追加
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>テーブル一括追加</DialogTitle>
+                          <DialogDescription>
+                            例: A-1〜A-6のようなテーブルを一度に作成します
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>プレフィックス</Label>
+                              <Input
+                                placeholder="A, B, カウンターなど"
+                                value={batchPrefix}
+                                onChange={(e) => setBatchPrefix(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>最大人数</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                value={batchMaxCapacity}
+                                onChange={(e) => setBatchMaxCapacity(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>開始番号</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                value={batchStartNumber}
+                                onChange={(e) => setBatchStartNumber(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>作成数</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                max="20"
+                                value={batchCount}
+                                onChange={(e) => setBatchCount(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            作成されるテーブル: {batchPrefix}-{batchStartNumber} 〜 {batchPrefix}-{parseInt(batchStartNumber) + parseInt(batchCount) - 1}
+                          </p>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setIsBatchAddTableOpen(false)}>
+                            キャンセル
+                          </Button>
+                          <Button onClick={handleBatchAddTables} disabled={createTableBatchMutation.isPending}>
+                            {createTableBatchMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            一括追加
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    <Dialog open={isAddTableOpen} onOpenChange={setIsAddTableOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="sm">
+                          <Plus className="w-4 h-4 mr-2" />
+                          テーブル追加
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>テーブルを追加</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Label>テーブル名 *</Label>
+                            <Input
+                              placeholder="A-1, テーブル1, カウンター席など"
+                              value={newTableName}
+                              onChange={(e) => setNewTableName(e.target.value)}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>最大人数</Label>
+                              <Input
+                                type="number"
+                                min="1"
+                                value={newTableMaxCapacity}
+                                onChange={(e) => setNewTableMaxCapacity(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label>セクション（任意）</Label>
+                              <Input
+                                placeholder="A, B, カウンターなど"
+                                value={newTableSection}
+                                onChange={(e) => setNewTableSection(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setIsAddTableOpen(false)}>
+                            キャンセル
+                          </Button>
+                          <Button onClick={handleAddTable} disabled={createTableMutation.isPending}>
+                            {createTableMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            追加
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!storeTables || storeTables.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Grid3X3 className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                    <p>テーブルが登録されていません</p>
+                    <p className="text-sm mt-1">「一括追加」でまとめて登録できます</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {storeTables.map((table) => (
+                      <div 
+                        key={table.id}
+                        className="relative p-4 border rounded-lg text-center hover:bg-muted/50 transition-colors group"
+                      >
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-red-600"
+                          onClick={() => handleDeleteTable(table.id)}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                        <p className="font-bold text-lg">{table.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          最大{table.maxCapacity}名
+                        </p>
+                        {table.section && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {table.section}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

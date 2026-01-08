@@ -75,6 +75,7 @@ export const partyRouter = router({
       phone: z.string().optional(),
       email: z.string().email().optional(),
       preferredSeatTypeId: z.number().optional(),
+      tableId: z.number().optional(),
       notes: z.string().optional(),
       allergies: z.string().optional(),
       priority: z.number().optional(),
@@ -88,6 +89,7 @@ export const partyRouter = router({
       phone?: string;
       email?: string;
       preferredSeatTypeId?: number;
+      tableId?: number;
       notes?: string;
       allergies?: string;
       priority?: number;
@@ -309,6 +311,44 @@ export const partyRouter = router({
 
       const previousStatus = party.status;
       await db.updatePartyStatus(party.id, "canceled");
+
+      return { success: true };
+    }),
+
+  // スタッフ用: パーティ更新
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      storeId: z.number(),
+      status: z.enum(["waiting", "notified", "arrived", "seated", "canceled", "noshow"]).optional(),
+      guestName: z.string().optional(),
+      partySize: z.number().optional(),
+      tableId: z.number().nullable().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }: ProtectedOpts<{
+      id: number;
+      storeId: number;
+      status?: "waiting" | "notified" | "arrived" | "seated" | "canceled" | "noshow";
+      guestName?: string;
+      partySize?: number;
+      tableId?: number | null;
+      notes?: string;
+    }>) => {
+      await checkStoreAccess(ctx.user.id, input.storeId);
+
+      const party = await db.getPartyById(input.id);
+      if (!party) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "受付情報が見つかりません" });
+      }
+
+      const { id, storeId, status, ...data } = input;
+
+      if (status) {
+        await db.updatePartyStatus(id, status, data);
+      } else {
+        await db.updateParty(id, data);
+      }
 
       return { success: true };
     }),
